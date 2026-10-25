@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0b10">
+  <title>RPG de Hábitos — Sistema</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Página inicial">
+        <span class="brand-mark">R<span>◆</span></span>
+        <span><strong>RPG DE HÁBITOS</strong><small>O SISTEMA ESTÁ OBSERVANDO</small></span>
+      </a>
+      <div class="top-stats">
+        <div class="mini-stat"><span class="mini-icon hp">♥</span><span><small>HP</small><strong id="top-hp">-- / --</strong></span><div class="mini-bar"><i id="top-hp-bar"></i></div></div>
+        <div class="mini-stat"><span class="mini-icon mp">◈</span><span><small>MP</small><strong id="top-mp">-- / --</strong></span><div class="mini-bar"><i id="top-mp-bar"></i></div></div>
+        <div class="coin-stat"><span>◉</span><strong id="top-coins">0</strong><small>MOEDAS</small></div>
+      </div>
+      <button id="logout-btn" class="icon-button" title="Sair" aria-label="Sair">⇥</button>
+    </header>
+
+    <nav class="main-nav" aria-label="Navegação principal">
+      <button class="nav-link active" data-tab="attributes"><span>▦</span> Atributos</button>
+      <button class="nav-link" data-tab="dungeon"><span>⚔</span> Dungeon <b id="dungeon-nav-dot" class="nav-dot hidden"></b></button>
+      <button class="nav-link" data-tab="dashboard"><span>⌁</span> Painel</button>
+      <button class="nav-link" data-tab="rewards"><span>◉</span> Recompensas</button>
+      <div class="nav-spacer"></div><span class="live-status"><i></i> ONLINE</span>
+    </nav>
+
+    <main id="main-content" class="main-content">
+      <div class="loading-state"><div class="loader"></div><span>Carregando o sistema...</span></div>
+    </main>
+
+    <footer class="app-footer"><span>RPG DE HÁBITOS // BUILD 01.0</span><span>XP É PROGRESSO. REGISTROS SÃO MEMÓRIA.</span></footer>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="site-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="site-modal-title">
+    <div class="modal-window modal-wide">
+      <div class="modal-head">
+        <div><p class="eyebrow">JANELA DE RECOMPENSA</p><h2 id="site-modal-title">Recompensa</h2></div>
+        <div class="modal-timer"><span>●</span><strong id="modal-timer">00:00</strong><small>RESTANTE</small></div>
+        <button class="icon-button modal-close" data-close-modal="site-modal" aria-label="Fechar">×</button>
+      </div>
+      <div class="site-switcher" id="site-switcher">
+        <button data-site="youtube" class="active">YouTube</button><button data-site="wikipedia">Wikipedia</button><button data-site="webtoon">WEBTOON</button><button data-site="chatgpt">ChatGPT</button>
+      </div>
+      <div class="iframe-wrap"><iframe id="site-frame" title="Conteúdo da recompensa" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe><div class="iframe-notice">Alguns sites bloqueiam a abertura dentro de outras páginas. Se isso acontecer, use <a id="site-external" target="_blank" rel="noopener noreferrer">Abrir em nova aba ↗</a>. O cronômetro continuará contando enquanto esta janela estiver aberta.</div></div>
+    </div>
+  </div>
+
+  <div id="story-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="story-modal-title">
+    <div class="modal-window modal-wide story-window">
+      <div class="modal-head"><div><p class="eyebrow">CAPÍTULO DESBLOQUEADO</p><h2 id="story-modal-title">Necromante da Estação de Seul</h2></div><button class="icon-button modal-close" data-close-modal="story-modal" aria-label="Fechar">×</button></div>
+      <div class="story-disclaimer">A leitura acontece na fonte oficial; o jogo não armazena nem reproduz o texto da obra.</div>
+      <div class="iframe-wrap story-frame-wrap"><iframe id="story-frame" title="Página oficial da novel" referrerpolicy="strict-origin-when-cross-origin"></iframe><div class="iframe-notice">Se a fonte bloquear a incorporação, abra a página oficial: <a id="story-external" target="_blank" rel="noopener noreferrer">Novel Mania ↗</a></div></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0b10">
+  <title>RPG de Hábitos — Acesso</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-body">
+  <main class="login-card">
+    <div class="sigil">RPG<span>◆</span></div>
+    <p class="eyebrow">SISTEMA DE PROGRESSÃO PESSOAL</p>
+    <h1>Desperte seu <span>potencial.</span></h1>
+    <p class="muted">O treino de hoje escreve o próximo capítulo.</p>
+    <form id="login-form">
+      <label for="password">Código de acesso</label>
+      <input id="password" name="password" type="password" inputmode="numeric" minlength="8" maxlength="8" pattern="[0-9]{8}" placeholder="••••••••" autocomplete="current-password" required>
+      <button class="primary full" type="submit">Entrar no sistema <span>↗</span></button>
+      <p id="login-error" class="error-text" aria-live="polite"></p>
+    </form>
+    <div class="login-foot"><span class="pulse-dot"></span> SISTEMA ONLINE <span class="version">BUILD 01.0</span></div>
+  </main>
+  <script>
+    const form = document.getElementById('login-form');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('login-error'); err.textContent = '';
+      try {
+        const response = await fetch('/api/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('password').value})});
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Não foi possível entrar.');
+        location.href = '/';
+      } catch (error) { err.textContent = error.message || 'Falha de conexão.'; }
+    });
+  </script>
+</body>
+</html>

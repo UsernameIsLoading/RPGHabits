@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: rpg-habitos-brabo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    healthCheckPath: /
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SITE_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rpg-habitos-db
+          property: connectionString
+
+databases:
+  - name: rpg-habitos-db
+    plan: free
+    databaseName: rpg_habitos
+    user: rpg_habitos

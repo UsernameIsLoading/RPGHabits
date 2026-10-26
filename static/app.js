@@ -4,7 +4,7 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = (v = '') => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const ATTR_CODES = ['HP','DEF','ATK','AGI','MP','MAG','RES','LUC'];
-  const state = { data:null, tab:'attributes', selectedAttr:'HP', site:'youtube', chart:null, chartSettings:{a:'HP',b:'',days:'30',group:'day'}, toastTimer:null, rewardInterval:null, storyUrl:'https://novelmania.com.br/novels/necromante-da-estacao-de-seul' };
+  const state = { data:null, tab:'attributes', selectedAttr:'HP', site:'youtube', chart:null, chartSettings:{a:'HP',b:'',days:'30',group:'day'}, toastTimer:null, rewardInterval:null, rewardExternalWindow:null, storyUrl:'https://novelmania.com.br/novels/necromante-da-estacao-de-seul' };
   const sites = {
     youtube:{title:'YouTube',url:'https://www.youtube.com',icon:'▶',desc:'Vídeos, aulas e conteúdos selecionados.'},
     wikipedia:{title:'Wikipedia',url:'https://pt.wikipedia.org/wiki/P%C3%A1gina_principal',icon:'◎',desc:'Pesquisa e leitura de conhecimento.'},
@@ -48,6 +48,7 @@
     if(state.tab==='attributes')root.innerHTML=renderAttributes();
     else if(state.tab==='dungeon')root.innerHTML=renderDungeon();
     else if(state.tab==='dashboard')root.innerHTML=renderDashboard();
+    else if(state.tab==='shop')root.innerHTML=renderShop();
     else root.innerHTML=renderRewards();
     bindPageEvents();
     if(state.tab==='dashboard')loadChart();
@@ -135,6 +136,19 @@
       </section>
       <section class="card content-card sub-section"><div class="card-head"><div><h2>Como ler o painel</h2><p>Os registros são pessoais e independentes da pontuação de XP.</p></div></div><div class="grid grid-3"><div class="dungeon-state-card"><small>AGRUPAMENTO DIÁRIO</small><strong>Um ponto por data</strong><p class="muted" style="font-size:10px">Mostra a média das medições naquele dia.</p></div><div class="dungeon-state-card"><small>AGRUPAMENTO SEMANAL</small><strong>Semana a semana</strong><p class="muted" style="font-size:10px">Usa a segunda-feira como início de semana.</p></div><div class="dungeon-state-card"><small>AGRUPAMENTO MENSAL</small><strong>Mês a mês</strong><p class="muted" style="font-size:10px">Ajuda a observar tendências de longo prazo.</p></div></div></section>`;
   }
+  function renderShop(){
+    const p=state.data.player;
+    const products=[
+      {id:'pocao_cura',icon:'🧪',name:'Poção de Cura',desc:'Recupera até 8 HP.',price:30,qty:p.inventory.consumables.find(x=>x.id==='pocao_cura')?.quantity||0},
+      {id:'pocao_mana',icon:'🔮',name:'Poção de Mana',desc:'Recupera até 6 MP.',price:30,qty:p.inventory.consumables.find(x=>x.id==='pocao_mana')?.quantity||0},
+      {id:'bracelete_salvacao',icon:'🛡️',name:'Bracelete da Salvação',desc:'Uso único: preserva equipamentos do loot se você morrer na dungeon.',price:500,qty:p.inventory.bracelete_salvacao||0},
+      {id:'ticket_dungeon',icon:'🎟️',name:'Ticket de Dungeon',desc:'Permite iniciar uma exploração extra além do limite semanal.',price:600,qty:p.inventory.ticket_dungeon||0},
+      {id:'minute',icon:'⏱️',name:'1 minuto adicional',desc:'Adiciona 60 segundos ao saldo especial permanente.',price:1000,qty:null}
+    ];
+    return `${renderHeading('Loja','Gaste suas moedas em consumíveis, segurança e tempo extra.',`<span class="badge red">◉ ${Number(p.coins).toLocaleString('pt-BR')} MOEDAS</span>`)}
+      <div class="site-grid">${products.map(it=>`<article class="card site-card"><span class="site-icon">${it.icon}</span><h3>${esc(it.name)}</h3><p>${esc(it.desc)}</p>${it.qty!==null?`<small class="muted">No inventário: ${it.qty}</small>`:''}<button class="primary" data-buy-item="${it.id}" ${Number(p.coins)<it.price?'disabled':''}>Comprar · ${it.price.toLocaleString('pt-BR')} moedas</button></article>`).join('')}</div>
+      <p class="muted" style="margin-top:16px">As compras são descontadas imediatamente. O bracelete só é consumido quando salva o loot de uma derrota; o ticket só é consumido ao entrar além do limite semanal.</p>`;
+  }
   function renderRewards(){
     const p=state.data.player;const story=p.story;
     const daily=p.daily_reward_seconds||0;const special=p.special_reward_seconds||0;
@@ -181,6 +195,7 @@
     const abandon=$('#abandon-dungeon');if(abandon)abandon.addEventListener('click',async()=>{if(!confirm('Abandonar agora? O loot temporário será perdido.'))return;try{const d=await api('/api/dungeon/abandon',{method:'POST',body:{}});state.data=d.state;render();toast(d.message,true)}catch(e){toast(e.message,true)}});
     $$('[data-dashboard-attr]').forEach(b=>b.addEventListener('click',()=>{state.chartSettings.a=b.dataset.dashboardAttr;state.chartSettings.b='';const a=$('#chart-a');if(a)a.value=state.chartSettings.a;const s=$('#chart-b');if(s)s.value='';loadChart()}));
     $('#chart-update')?.addEventListener('click',()=>{state.chartSettings.a=$('#chart-a').value;state.chartSettings.b=$('#chart-b').value;state.chartSettings.days=$('#chart-days').value;state.chartSettings.group=$('#chart-group').value;loadChart()});
+    $$('[data-buy-item]').forEach(b=>b.addEventListener('click',async()=>{try{const d=await api('/api/shop/buy',{method:'POST',body:{item_id:b.dataset.buyItem}});state.data=d.state;render();toast(d.message);}catch(e){toast(e.message,true)}}));
     $$('[data-open-site]').forEach(b=>b.addEventListener('click',()=>openSite(b.dataset.openSite)));
     $$('[data-open-story]').forEach(b=>b.addEventListener('click',()=>openStory(Number(b.dataset.openStory))));
   }
@@ -246,13 +261,14 @@
     const p=state.data?.player;if(!p)return;const remaining=(p.daily_reward_seconds||0)+(p.special_reward_seconds||0);$('#modal-timer').textContent=fmtTime(remaining);$('#reward-daily-display')&&($('#reward-daily-display').textContent=humanDuration(p.daily_reward_seconds||0));$('#reward-special-display')&&($('#reward-special-display').textContent=humanDuration(p.special_reward_seconds||0));
   }
   function startRewardPings(){stopRewardPings();state.rewardInterval=setInterval(async()=>{
-    try{const d=await api('/api/rewards/tick',{method:'POST',body:{}});if(state.data){state.data.player.daily_reward_seconds=d.daily;state.data.player.special_reward_seconds=d.special;state.data.player.reward_session_active=d.active;}updateModalTimer();if(!d.active){stopRewardPings();$('#site-modal').classList.add('hidden');$('#site-frame').src='about:blank';toast('O tempo de recompensa acabou.');}}catch(e){stopRewardPings();toast(e.message,true)}
-  },10000);}
+    try{const d=await api('/api/rewards/tick',{method:'POST',body:{}});if(state.data){state.data.player.daily_reward_seconds=d.daily;state.data.player.special_reward_seconds=d.special;state.data.player.reward_session_active=d.active;}updateModalTimer();if(!d.active){stopRewardPings();$('#site-modal').classList.add('hidden');$('#site-frame').src='about:blank';if(state.rewardExternalWindow&&!state.rewardExternalWindow.closed){try{state.rewardExternalWindow.close()}catch{}}state.rewardExternalWindow=null;toast('O tempo de recompensa acabou.');}}catch(e){stopRewardPings();toast(e.message,true)}
+  },1000);}
+  $('#site-external')?.addEventListener('click',e=>{e.preventDefault();const url=sites[state.site]?.url;if(!url)return;state.rewardExternalWindow=window.open(url,'questhubRewardSite');if(!state.rewardExternalWindow){toast('O navegador bloqueou a nova aba. Permita pop-ups para fechar a aba automaticamente ao acabar o tempo.',true);return;} });
   function stopRewardPings(){if(state.rewardInterval){clearInterval(state.rewardInterval);state.rewardInterval=null;}}
   async function closeModal(id){
     const el=$(`#${id}`);if(!el)return;el.classList.add('hidden');
     if(id==='site-modal'){
-      stopRewardPings();$('#site-frame').src='about:blank';
+      stopRewardPings();$('#site-frame').src='about:blank';if(state.rewardExternalWindow&&!state.rewardExternalWindow.closed){try{state.rewardExternalWindow.close()}catch{}}state.rewardExternalWindow=null;
       try{const d=await api('/api/rewards/session',{method:'POST',body:{active:false}});state.data=d.state||state.data;updateModalTimer();}catch(e){toast(e.message,true)}
     }else{$('#story-frame').src='about:blank';}
   }

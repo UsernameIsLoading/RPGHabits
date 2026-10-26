@@ -62,7 +62,7 @@ def default_xp() -> dict[str, int]:
 
 
 def default_inventory() -> dict:
-    return {"pocao_cura": 2, "pocao_mana": 2, "equipment": {}}
+    return {"pocao_cura": 2, "pocao_mana": 2, "equipment": {}, "bracelete_salvacao": 0, "ticket_dungeon": 0}
 
 
 class Player(db.Model):
@@ -142,8 +142,8 @@ def get_player() -> Player:
         p.xp_by_attribute = default_xp()
     if not p.inventory:
         p.inventory = default_inventory()
-    if "equipment" not in p.inventory:
-        inv = clone_json(p.inventory, default_inventory()); inv["equipment"] = {}; p.inventory = inv
+    if "equipment" not in p.inventory or "bracelete_salvacao" not in p.inventory or "ticket_dungeon" not in p.inventory:
+        inv = clone_json(p.inventory, default_inventory()); inv.setdefault("equipment", {}); inv.setdefault("bracelete_salvacao", 0); inv.setdefault("ticket_dungeon", 0); p.inventory = inv
     if p.equipped is None: p.equipped = {}
     if p.dungeon_state is not None and "loot" not in p.dungeon_state:
         run = clone_json(p.dungeon_state, {}); run["loot"] = []; p.dungeon_state = run
@@ -161,7 +161,7 @@ def tick_reward_timer(p: Player):
     ensure_daily_reset(p)
     now = local_now()
     if p.reward_session_active and p.reward_last_tick_at:
-        elapsed = max(0, min(20, int((now - p.reward_last_tick_at).total_seconds())))
+        elapsed = max(0, int((now - p.reward_last_tick_at).total_seconds()))
         from_daily = min(elapsed, max(0, int(p.daily_reward_seconds)))
         p.daily_reward_seconds = max(0, int(p.daily_reward_seconds) - from_daily)
         leftover = elapsed - from_daily
@@ -198,7 +198,7 @@ def inventory_payload(p: Player) -> dict:
     for item in CONSUMABLES.values():
         consumables.append({**item, "quantity": int(inv.get(item["id"], 0)),
                             "dungeon_quantity": int((p.dungeon_state or {}).get("run_potions", {}).get(item["id"], 0))})
-    return {"equipment": equipment, "consumables": consumables, "equipped": equipped}
+    return {"equipment": equipment, "consumables": consumables, "equipped": equipped, "bracelete_salvacao": int(inv.get("bracelete_salvacao", 0)), "ticket_dungeon": int(inv.get("ticket_dungeon", 0))}
 
 
 def build_state(p: Player) -> dict:
@@ -494,7 +494,11 @@ def api_dungeon_start():
     if p.dungeon_state:return api_error("Você já está explorando uma dungeon.")
     since=local_now()-timedelta(days=7)
     attempts=DungeonAttempt.query.filter(DungeonAttempt.started_at>=since).count()
-    if attempts>=WEEKLY_DUNGEON_LIMIT:return api_error("Limite atingido: são no máximo 2 explorações a cada 7 dias.")
+    inv=clone_json(p.inventory,default_inventory())
+    ticket_count=int(inv.get("ticket_dungeon",0))
+    if attempts>=WEEKLY_DUNGEON_LIMIT and ticket_count<=0:return api_error("Limite atingido: são no máximo 2 explorações a cada 7 dias. Compre um Ticket de Dungeon na loja para entrar novamente.")
+    if attempts>=WEEKLY_DUNGEON_LIMIT and ticket_count>0:
+        inv["ticket_dungeon"]=ticket_count-1;p.inventory=inv
     xp=clone_json(p.xp_by_attribute,default_xp())
     run=create_dungeon(xp,random.Random())
     attempt=DungeonAttempt(started_at=local_now(),outcome="em_andamento",floors=run["floors"])
@@ -535,13 +539,19 @@ def _finalize_run(p: Player, run: dict, outcome: str, message: str):
     if attempt:
         attempt.outcome=outcome;attempt.ended_at=local_now()
     p.last_dungeon_result=message
+    inv=clone_json(p.inventory,default_inventory())
     if outcome=="victory":
-        inv=clone_json(p.inventory,default_inventory());equipment=inv.setdefault("equipment",{})
+        equipment=inv.setdefault("equipment",{})
         for item_id in run.get("loot",[]):equipment[item_id]=int(equipment.get(item_id,0))+1
         for pot,qty in run.get("run_potions",{}).items():inv[pot]=int(inv.get(pot,0))+int(qty)
-        p.inventory=inv
-        # Vitória final completa a dungeon e concede 40 minutos de saldo especial permanente.
+        # Vitória final concede 40 minutos especiais permanentes.
         p.permanent_special_seconds=int(p.permanent_special_seconds)+40*60
+    elif outcome=="derrota" and run.get("loot") and int(inv.get("bracelete_salvacao",0))>0:
+        equipment=inv.setdefault("equipment",{})
+        for item_id in run.get("loot",[]):equipment[item_id]=int(equipment.get(item_id,0))+1
+        inv["bracelete_salvacao"]-=1
+        p.last_dungeon_result=message+" O Bracelete da Salvação foi consumido e preservou os equipamentos encontrados."
+    p.inventory=inv
     p.dungeon_state=None
 
 
@@ -609,6 +619,23 @@ def api_dungeon_abandon():
     _finalize_run(p,clone_json(run,{}),"abandonada","Dungeon abandonada; itens temporários foram perdidos e moedas foram preservadas. HP/MP voltaram para 10.")
     db.session.commit()
     return jsonify({"ok":True,"message":p.last_dungeon_result,"state":build_state(p)})
+
+
+@app.post("/api/shop/buy")
+@require_auth
+def api_shop_buy():
+    data=request.get_json(silent=True) or {}; item_id=str(data.get("item_id", ""))
+    prices={"pocao_cura":30,"pocao_mana":30,"bracelete_salvacao":500,"ticket_dungeon":600,"minute":1000}
+    labels={"pocao_cura":"Poção de Cura","pocao_mana":"Poção de Mana","bracelete_salvacao":"Bracelete da Salvação","ticket_dungeon":"Ticket de Dungeon","minute":"1 minuto adicional"}
+    if item_id not in prices:return api_error("Item não encontrado na loja.")
+    p=get_player();price=prices[item_id]
+    if int(p.coins)<price:return api_error(f"Moedas insuficientes. Você precisa de {price} moedas.")
+    p.coins-=price
+    if item_id=="minute":p.permanent_special_seconds=int(p.permanent_special_seconds)+60
+    else:
+        inv=clone_json(p.inventory,default_inventory());inv[item_id]=int(inv.get(item_id,0))+1;p.inventory=inv
+    db.session.commit()
+    return jsonify({"ok":True,"message":f"Compra realizada: {labels[item_id]}.","state":build_state(p)})
 
 
 @app.post("/api/rewards/session")

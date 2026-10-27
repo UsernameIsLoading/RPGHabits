@@ -9,7 +9,9 @@ services:
     envVars:
       - key: SECRET_KEY
         generateValue: true
-      - key: SITE_PASSWORD
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
         sync: false
       - key: DATABASE_URL
         fromDatabase:

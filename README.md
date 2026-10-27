@@ -1,21 +1,33 @@
-# RPG de Hábitos — Build 01.0
+# RPG de Hábitos — versão multiplayer/offline (base inicial)
 
-Aplicação web de um jogador, construída do zero com Flask, SQLAlchemy e PostgreSQL/SQLite. Não depende de nenhum projeto chamado A Travessia.
+Aplicação web em Flask + SQLAlchemy, preparada para PostgreSQL no servidor e SQLite local. A interface tem tema pixel art, sprites de classe, seleção de classe no primeiro acesso, tarefas configuráveis, relíquias vinculadas à conta, PWA instalável e base de sincronização offline.
 
-## O que já está no projeto
+> **Limitação importante desta versão:** a base de contas, sincronização e interface offline foi adicionada, mas a dungeon e o combate continuam sendo processados pelo servidor. Iniciar dungeon, movimentar-se e realizar ações de combate exigem conexão nesta versão. Não é simulado um combate local com regras diferentes do motor Python.
 
-- Quatro áreas: **Atributos**, **Dungeon**, **Painel** e **Recompensas**.
-- Oito atributos associados a hábitos diários, progressão independente F→S e autoavaliação de 0/3/6/9 XP, uma vez por atributo por dia.
-- Registro de atividades com texto, número e observação, além de edição/exclusão e gráficos com filtro de período e agregação por dia/semana/mês.
-- Catálogo de 56 habilidades, 24 equipamentos e 12 monstros, com fontes de loot únicas por monstro.
-- Dungeon de 3 a 7 andares; mapa 6×6; visão local; movimentação em oito direções; baús; combate por turnos; loot temporário; moedas preservadas após derrota; no máximo duas entradas por janela móvel de sete dias.
-- Duas poções consumíveis: **Poção de Cura** (+8 HP) e **Poção de Mana** (+6 MP). A personagem começa com duas de cada. Poções nunca ultrapassam o máximo de HP/MP; durante o combate, usá-las gasta a ação do turno.
-- Recompensas de tempo de lazer e desbloqueio de capítulos ímpares por treino físico e pares por estudos. O site da novel é aberto na fonte oficial; o projeto não copia nem armazena o texto da obra.
-- Código de acesso único, em vez de sistema de contas múltiplas.
+## O que inclui
+
+- **Múltiplas contas:** registro com senha protegida por hash, login e dados isolados por conta. Esta base ainda não inclui PvP ou cooperação em tempo real; essas modalidades precisam de regras e implementação próprias.
+- **Administração:** a conta `ADMIN_USERNAME` (por padrão, `admin`) acessa `/admin`; pode baixar um backup lógico JSON, enviar/restaurar um backup no mesmo formato e baixar as dez cópias automáticas anteriores a restaurações. A restauração substitui os dados de todos os jogadores, pede confirmação e limita uploads a 50 MB.
+- **Classes:** Guardião (HP), Sentinela (DEF), Lutador (ATK), Duelista (AGI), Invocador (MP), Arcanista (MAG), Monge (RES) e Explorador (LUC). A seleção ocorre uma única vez no primeiro acesso. O atributo dominante recebe o dobro da XP de avaliação: 0/6/12/18 para avaliações 0/3/6/9, respetivamente; as demais avaliações continuam em 0/3/6/9.
+- **Tarefas configuráveis:** cada atributo pode ter uma tarefa própria; os nomes precisam ser únicos para evitar que a mesma tarefa conte para mais de um atributo.
+- **Relíquias Vinculadas:** apenas Manto do Herói Esquecido, Anel do Investidor Nato e Pingente da Deusa do Amor. As duas relíquias de efeito contínuo são permanentes e só uma pode ficar ativa por vez; o Pingente é consumível. Os preços iniciais (2500/1500/500 moedas) são valores provisórios de balanceamento.
+- **PWA:** manifesto, service worker no escopo raiz (controla o site inteiro), cache de recursos e armazenamento local em IndexedDB, com fallback para localStorage nos navegadores sem IndexedDB.
+- **Fila de sincronização:** ações compatíveis com modo offline são guardadas localmente com identificadores idempotentes e enviadas quando a conexão volta. A configuração de tarefas usa versão para detectar mudanças concorrentes; a interface pode pedir para manter ou descartar uma alteração conflitante.
+- **Preservação das regras existentes:** atributos, ranks, habilidades, equipamentos, monstros, loja original, dungeon e combate por turnos continuam no motor existente.
+
+## O que funciona offline nesta versão
+
+Depois de abrir o jogo conectado ao menos uma vez, o aplicativo pode carregar a interface em cache e recuperar o estado local da conta no mesmo navegador/dispositivo. Avaliações de hábitos, registros de atividade, alteração das tarefas, compras compatíveis, uso de poções fora do combate, equipar/retirar equipamentos e algumas operações de relíquias podem ser registradas localmente e sincronizadas posteriormente.
+
+- A dungeon e as ações de combate ainda exigem conexão.
+- Os sites externos de recompensa (YouTube, Wikipedia, WEBTOON, ChatGPT e a página da novel) exigem internet. O jogo não inicia uma nova sessão de recompensa quando está offline.
+- Login, cadastro, primeira escolha de classe, exportação/restauração e sincronização exigem conexão.
+- A conta offline só tem os dados que já foram guardados nesse navegador. Limpar os dados do navegador ou perder o aparelho antes da sincronização pode apagar mudanças que ainda não chegaram ao servidor. Evite jogar offline em dispositivos compartilhados.
+- A sincronização é por conta e as alterações recebem identificadores idempotentes. Conflitos de tarefas e relíquias permitem escolher uma versão; uma avaliação duplicada exige preservar a que já foi confirmada no servidor ou adiar a decisão. O banner de conflito pode ser tocado para reabrir a tela.
 
 ## Executar localmente
 
-Requer Python 3.11 ou mais recente.
+Requer Python 3.11+.
 
 ### Windows (PowerShell)
 
@@ -23,7 +35,8 @@ Requer Python 3.11 ou mais recente.
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-$env:SITE_PASSWORD="12345678"
+$env:ADMIN_USERNAME="admin"
+$env:ADMIN_PASSWORD="escolha-uma-senha-forte"
 $env:SECRET_KEY="troque-por-uma-chave-longa-e-aleatoria"
 python app.py
 ```
@@ -34,53 +47,35 @@ python app.py
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-export SITE_PASSWORD="12345678"
-export SECRET_KEY="troque-por-uma-chave-longa-e-aleatoria"
+export ADMIN_USERNAME=admin
+export ADMIN_PASSWORD='escolha-uma-senha-forte'
+export SECRET_KEY='troque-por-uma-chave-longa-e-aleatoria'
 python app.py
 ```
 
-Abra `http://127.0.0.1:5000`. Sem `DATABASE_URL`, o app cria `instance/rpg_habitos.db` automaticamente. Não exclua esse arquivo se quiser preservar os dados locais.
-
-O código local padrão é `12345678`. Mude-o para seu próprio código antes de usar em uma rede compartilhada.
+Abra `http://127.0.0.1:5000`. Sem `DATABASE_URL`, o sistema usa `instance/rpg_habitos.db` (SQLite). A conta administrativa inicial é o valor de `ADMIN_USERNAME`, com a senha fornecida em `ADMIN_PASSWORD`. Para instalações anteriores, `SITE_PASSWORD` é usado como fallback durante a criação inicial da conta administrativa. A senha existente não é redefinida automaticamente em cada inicialização.
 
 ## Publicar no Render
 
-O repositório inclui `render.yaml` (Blueprint), `requirements.txt` e `Procfile`.
+1. Envie os arquivos para um repositório Git e crie um Blueprint no Render usando `render.yaml`.
+2. Defina `ADMIN_PASSWORD` como uma senha forte no Render. `ADMIN_USERNAME` começa como `admin`; `SECRET_KEY` é gerada pelo Blueprint e `DATABASE_URL` aponta para PostgreSQL.
+3. Depois do deploy, abra o serviço, entre na conta administrativa e conclua a escolha de classe, se for solicitada.
+4. Para abrir a administração, use o ícone de engrenagem no jogo ou visite `/admin` após entrar como admin.
 
-1. Envie o conteúdo desta pasta para um repositório Git.
-2. No Render, crie um **Blueprint** a partir do repositório e aplique o `render.yaml`.
-3. Quando solicitado, defina `SITE_PASSWORD` como um código de oito dígitos que só você conheça. `SECRET_KEY` é gerada pelo Blueprint e `DATABASE_URL` é ligado ao PostgreSQL criado pelo Blueprint.
-4. Depois do deploy, abra a URL do serviço e entre com o código configurado.
+Comandos para Web Service manual:
 
-Comandos equivalentes para um Web Service manual:
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `gunicorn app:app`
+- Health Check Path: `/`
+- Variáveis: `SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `DATABASE_URL`
 
-- **Build Command:** `pip install -r requirements.txt`
-- **Start Command:** `gunicorn app:app`
-- **Health Check Path:** `/`
-- **Variáveis:** `SECRET_KEY`, `SITE_PASSWORD`, `DATABASE_URL`
+**Migração de versões antigas:** a inicialização adiciona colunas ao banco e tenta associar o personagem único anterior à conta administrativa. Faça download de um backup antes de atualizar uma instalação que já tenha progresso.
 
-### Atenção à persistência no plano gratuito
+## Backups administrativos
 
-O serviço web gratuito do Render não mantém dados gravados no sistema de arquivos local entre reinicializações. Por isso o Blueprint usa PostgreSQL, e não o SQLite local. **O PostgreSQL gratuito do Render expira 30 dias após sua criação**; para manter o progresso a longo prazo, faça upgrade do banco antes da expiração ou configure `DATABASE_URL` para um PostgreSQL com persistência contínua. Consulte a documentação atual do Render antes de publicar: <https://render.com/docs/free>.
+O botão **Baixar backup completo** exporta um backup lógico JSON desta versão, contendo contas (inclusive hashes de senha), personagens, avaliações, atividades, tentativas de dungeon e chaves idempotentes da sincronização. O arquivo permite restaurar os dados dentro desta aplicação; não é um dump SQL nativo do PostgreSQL. Guarde o arquivo em local privado. Antes de qualquer restauração, o sistema guarda uma cópia compactada do banco atual; as dez cópias automáticas mais recentes podem ser baixadas pela área administrativa. Restaurar substitui os dados de domínio e encerra a sessão para exigir novo login.
 
-## Regras de balanceamento adotadas provisoriamente
-
-As regras confirmadas pelo jogador estão incorporadas no motor. Para que a primeira versão rode sem mais bloqueios, alguns números sem definição explícita no documento foram configurados como padrões iniciais e podem ser alterados nos arquivos `game_engine.py`:
-
-- Poção de Cura: +8 HP; Poção de Mana: +6 MP; inventário inicial: duas de cada.
-- Baús: 62% de chance de conter poção, com uma ou duas unidades; moedas independentes.
-- Cada item listado no loot tem chance independente de 45% de cair.
-- Faixas-base de moedas: comum 4–10, forte 12–24, chefe 30–50; o rank do monstro ajusta a faixa por multiplicador.
-- Esquiva: 5% inicial, +5 pontos percentuais por ponto de vantagem de AGI defensiva, limitada a 60%; Pós-imagem soma 20 pontos percentuais, respeitando teto de 80%.
-- O crédito fracionário de Fórmula Eficiente acumula durante uma dungeon e é descartado quando ela termina ou o jogador morre.
-- Enquanto a lista de itens é fechada e não há variantes de raridade, o efeito de melhoria de raridade de LUC gera uma pequena recompensa em moedas; a mensagem do jogo indica esse comportamento provisório.
-- Dois equipamentos ainda não têm fonte de drop na lista atual: **Braçadeira do Guardião** e **Luvas do Lutador**. Continuam no catálogo e podem receber uma fonte em balanceamento futuro, sem duplicar os drops já definidos.
-
-Esses padrões não são apresentados como regras originais do documento; estão destacados para facilitar a revisão do balanceamento.
-
-## Testes
-
-O motor independente do framework é testado com:
+## Testes e verificações
 
 ```bash
 python -m unittest discover -s tests -v
@@ -88,17 +83,22 @@ python -m py_compile app.py game_data.py game_engine.py
 node --check static/app.js
 ```
 
+A suíte independente do motor pode ser executada sem Flask. Testes de integração web precisam ser executados em um ambiente com as dependências de `requirements.txt` instaladas.
+
 ## Estrutura
 
 ```text
-app.py                 Rotas web, autenticação, persistência e APIs
-game_data.py           Catálogo de habilidades, equipamentos, monstros e poções
- game_engine.py        Progressão, dungeon, combate, efeitos, loot e moedas
- templates/login.html Acesso por código
- templates/index.html Interface principal e janelas de recompensa
- static/app.js         Interface dinâmica e chamadas de API
- static/style.css      Tema visual responsivo
- tests/test_engine.py  Testes básicos do motor
- render.yaml           Blueprint do Render
- requirements.txt      Dependências Python
+app.py                  rotas, autenticação, persistência, migração e APIs
+app_pre_multiplayer.py  cópia de referência da versão anterior
+ game_data.py            catálogo de habilidades, equipamentos, monstros e itens
+ game_engine.py          progressão, dungeon, combate, efeitos e loot
+templates/login.html     entrada/criação de conta
+templates/setup.html     escolha de classe única no primeiro acesso
+templates/index.html     interface de jogo
+ templates/admin.html    backups administrativos
+static/app.js            interface, cache local e fila de sincronização
+static/service-worker.js cache da PWA e política de atualização adiada
+static/sprites/          sprites pixel-art das classes
+tests/test_engine.py     testes do motor
+a render.yaml            configuração do deploy no Render
 ```

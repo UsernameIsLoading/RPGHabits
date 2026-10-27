@@ -2,36 +2,28 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b0b10">
-  <title>RPG de Hábitos — Acesso</title>
+  <meta name="theme-color" content="#101321"><link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <title>RPG de Hábitos — Portal</title>
 </head>
-<body class="login-body">
-  <main class="login-card">
-    <div class="sigil">RPG<span>◆</span></div>
-    <p class="eyebrow">SISTEMA DE PROGRESSÃO PESSOAL</p>
-    <h1>Desperte seu <span>potencial.</span></h1>
-    <p class="muted">O treino de hoje escreve o próximo capítulo.</p>
-    <form id="login-form">
-      <label for="password">Código de acesso</label>
-      <input id="password" name="password" type="password" inputmode="numeric" minlength="8" maxlength="8" pattern="[0-9]{8}" placeholder="••••••••" autocomplete="current-password" required>
-      <button class="primary full" type="submit">Entrar no sistema <span>↗</span></button>
-      <p id="login-error" class="error-text" aria-live="polite"></p>
+<body class="login-body pixel-theme">
+  <main class="login-card pixel-panel auth-panel">
+    <div class="sigil">RPG<span>◆</span></div><p class="eyebrow">PORTAL DE AVENTUREIROS</p>
+    <h1>Seu progresso.<br><span>Sua jornada.</span></h1>
+    <p class="muted">Entre na sua conta ou crie um personagem para começar.</p>
+    <div class="auth-switch"><button type="button" id="auth-login-tab" class="active">Entrar</button><button type="button" id="auth-register-tab">Criar conta</button></div>
+    <form id="auth-form">
+      <label for="username">Nome de usuário</label><input id="username" name="username" type="text" minlength="3" maxlength="48" pattern="[A-Za-z0-9_.-]+" autocomplete="username" placeholder="ex.: aventureiro01" required>
+      <label for="password" id="password-label">Senha</label><input id="password" name="password" type="password" minlength="10" maxlength="128" autocomplete="current-password" placeholder="Mínimo de 10 caracteres" required>
+      <button class="primary full" type="submit" id="auth-submit">Entrar no sistema ↗</button><p id="auth-error" class="error-text" aria-live="polite"></p>
     </form>
-    <div class="login-foot"><span class="pulse-dot"></span> SISTEMA ONLINE <span class="version">BUILD 01.0</span></div>
+    <div class="login-foot"><span class="pulse-dot"></span> RPG DE HÁBITOS <span class="version">OFFLINE READY</span></div>
   </main>
   <script>
-    const form = document.getElementById('login-form');
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const err = document.getElementById('login-error'); err.textContent = '';
-      try {
-        const response = await fetch('/api/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('password').value})});
-        const data = await response.json();
-        if (!response.ok || !data.ok) throw new Error(data.error || 'Não foi possível entrar.');
-        location.href = '/';
-      } catch (error) { err.textContent = error.message || 'Falha de conexão.'; }
-    });
+    let mode='login'; const $=s=>document.querySelector(s);
+    function setMode(next){mode=next;$('#auth-login-tab').classList.toggle('active',mode==='login');$('#auth-register-tab').classList.toggle('active',mode==='register');$('#auth-submit').textContent=mode==='login'?'Entrar no sistema ↗':'Criar conta ↗';$('#password-label').textContent=mode==='login'?'Senha':'Crie uma senha';$('#password').autocomplete=mode==='login'?'current-password':'new-password';$('#password').placeholder=mode==='login'?'Sua senha':'Use pelo menos 10 caracteres';$('#auth-error').textContent='';}
+    $('#auth-login-tab').addEventListener('click',()=>setMode('login'));$('#auth-register-tab').addEventListener('click',()=>setMode('register'));
+    $('#auth-form').addEventListener('submit',async e=>{e.preventDefault();const error=$('#auth-error');error.textContent='';const body={username:$('#username').value.trim(),password:$('#password').value};try{const r=await fetch(mode==='login'?'/api/login':'/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Não foi possível continuar.');location.href='/';}catch(ex){error.textContent=ex.message||'Falha de conexão.';}});
   </script>
-</body>
-</html>
+  <script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));</script>
+</body></html>

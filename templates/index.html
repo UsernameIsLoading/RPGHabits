@@ -2,25 +2,25 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b0b10">
+  <meta name="theme-color" content="#101321"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
   <title>RPG de Hábitos — Sistema</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </head>
-<body class="app-body">
+<body class="app-body pixel-theme" data-account-id="{{ session.get('user_id', '') }}">
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="/" aria-label="Página inicial">
         <span class="brand-mark">R<span>◆</span></span>
         <span><strong>RPG DE HÁBITOS</strong><small>O SISTEMA ESTÁ OBSERVANDO</small></span>
       </a>
+      <div id="class-avatar" class="class-avatar-chip" aria-label="Classe do personagem"></div>
       <div class="top-stats">
         <div class="mini-stat"><span class="mini-icon hp">♥</span><span><small>HP</small><strong id="top-hp">-- / --</strong></span><div class="mini-bar"><i id="top-hp-bar"></i></div></div>
         <div class="mini-stat"><span class="mini-icon mp">◈</span><span><small>MP</small><strong id="top-mp">-- / --</strong></span><div class="mini-bar"><i id="top-mp-bar"></i></div></div>
         <div class="coin-stat"><span>◉</span><strong id="top-coins">0</strong><small>MOEDAS</small></div>
       </div>
-      <button id="logout-btn" class="icon-button" title="Sair" aria-label="Sair">⇥</button>
+      <div class="account-actions"><a id="admin-link" class="icon-button {% if not session.get('is_admin') %}hidden{% endif %}" href="/admin" title="Administração" aria-label="Administração">⚙</a><button id="logout-btn" class="icon-button" title="Sair" aria-label="Sair">⇥</button></div>
     </header>
 
     <nav class="main-nav" aria-label="Navegação principal">
@@ -28,17 +28,20 @@
       <button class="nav-link" data-tab="dungeon"><span>⚔</span> Dungeon <b id="dungeon-nav-dot" class="nav-dot hidden"></b></button>
       <button class="nav-link" data-tab="dashboard"><span>⌁</span> Painel</button>
       <button class="nav-link" data-tab="rewards"><span>◉</span> Recompensas</button>
-      <div class="nav-spacer"></div><span class="live-status"><i></i> ONLINE</span>
+      <button class="nav-link" data-tab="shop"><span>♜</span> Loja</button>
+      <div class="nav-spacer"></div><span class="live-status" id="connection-status"><i></i><span>ONLINE</span></span>
     </nav>
 
+    <div id="offline-banner" class="offline-banner hidden" role="status"></div>
     <main id="main-content" class="main-content">
       <div class="loading-state"><div class="loader"></div><span>Carregando o sistema...</span></div>
     </main>
 
-    <footer class="app-footer"><span>RPG DE HÁBITOS // BUILD 01.0</span><span>XP É PROGRESSO. REGISTROS SÃO MEMÓRIA.</span></footer>
+    <footer class="app-footer"><span>RPG DE HÁBITOS // BUILD 02.0</span><span>XP É PROGRESSO. REGISTROS SÃO MEMÓRIA.</span></footer>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="sync-conflict-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sync-conflict-title"><div class="modal-window conflict-window"><p class="eyebrow">SINCRONIZAÇÃO PAUSADA</p><h2 id="sync-conflict-title">Precisamos da sua decisão</h2><p id="sync-conflict-message"></p><div class="conflict-actions"><button id="sync-retry" class="primary">Manter e tentar novamente</button><button id="sync-discard" class="danger">Descartar esta alteração local</button></div><small>O restante da fila ficará pendente até resolver este item.</small></div></div>
 
   <div id="site-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="site-modal-title">
     <div class="modal-window modal-wide">
@@ -50,7 +53,7 @@
       <div class="site-switcher" id="site-switcher">
         <button data-site="youtube" class="active">YouTube</button><button data-site="wikipedia">Wikipedia</button><button data-site="webtoon">WEBTOON</button><button data-site="chatgpt">ChatGPT</button>
       </div>
-      <div class="iframe-wrap"><iframe id="site-frame" title="Conteúdo da recompensa" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe><div class="iframe-notice">Alguns sites bloqueiam a abertura dentro de outras páginas. Se isso acontecer, use <a id="site-external" target="_blank" rel="noopener noreferrer">Abrir em nova aba ↗</a>. O cronômetro continuará contando enquanto esta janela estiver aberta.</div></div>
+      <div class="iframe-wrap"><iframe id="site-frame" title="Conteúdo da recompensa" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe><div class="iframe-notice">Alguns sites bloqueiam a abertura dentro de outras páginas. Se isso acontecer, use <a id="site-external" href="#">Abrir em nova aba ↗</a>. O cronômetro continuará contando enquanto esta janela estiver aberta.</div></div>
     </div>
   </div>
 
@@ -61,5 +64,6 @@
       <div class="iframe-wrap story-frame-wrap"><iframe id="story-frame" title="Página oficial da novel" referrerpolicy="strict-origin-when-cross-origin"></iframe><div class="iframe-notice">Se a fonte bloquear a incorporação, abra a página oficial: <a id="story-external" target="_blank" rel="noopener noreferrer">Novel Mania ↗</a></div></div>
     </div>
   </div>
+  <script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));</script>
 </body>
 </html>

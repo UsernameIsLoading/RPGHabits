@@ -1181,7 +1181,7 @@ def migrate_schema():
         for col, declaration in columns.items():
             if col not in present:
                 with db.engine.begin() as conn:
-                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {declaration}"))
+                    conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{col}" {declaration}'))
     # Remove legacy global daily uniqueness so different accounts can evaluate the same attribute/day.
     # A previous build may have imposed UNIQUE(attribute, day); each account now needs its own key.
     daily_table = DailyEvaluation.__table__.name

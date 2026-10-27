@@ -1167,6 +1167,9 @@ def migrate_schema():
     existing_tables = set(inspector.get_table_names())
     # Use the actual SQLAlchemy table names (singular snake_case), not guessed plural names.
     additions = {
+        # db.create_all() does not add columns to an already-existing table.
+        # Upgrade legacy accounts before querying User during admin bootstrap.
+        User.__table__.name: {"is_admin": "BOOLEAN NOT NULL DEFAULT FALSE"},
         Player.__table__.name: {"user_id": "INTEGER", "class_code": "VARCHAR(24)", "task_mapping": "JSON", "task_mapping_version": "INTEGER DEFAULT 0", "setup_complete": "BOOLEAN DEFAULT FALSE", "relics_owned": "JSON", "active_relic_id": "VARCHAR(24)", "manto_xp_remainder": "INTEGER DEFAULT 0"},
         DailyEvaluation.__table__.name: {"user_id": "INTEGER"},
         Activity.__table__.name: {"user_id": "INTEGER", "client_ref": "VARCHAR(80)"},

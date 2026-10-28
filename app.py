@@ -76,6 +76,9 @@ def default_inventory() -> dict:
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(48), unique=True, nullable=False, index=True)
+    # Some older deployed databases require email even though the current UI uses usernames.
+    # Keep it mapped so inserts satisfy both old and new schemas.
+    email = db.Column(db.String(255), nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=local_now)
@@ -442,7 +445,12 @@ def register():
         return api_error("A senha deve ter entre 10 e 128 caracteres.")
     if User.query.filter_by(username=username).first():
         return api_error("Esse nome de usuário já está em uso.")
-    user = User(username=username, password_hash=generate_password_hash(password), is_admin=False)
+    user = User(
+        username=username,
+        email=f"{username}@users.rpg-habitos.invalid",
+        password_hash=generate_password_hash(password),
+        is_admin=False,
+    )
     db.session.add(user); db.session.flush()
     player = Player(user_id=user.id, xp_by_attribute=default_xp(), inventory=default_inventory(), equipped={},
                     coins=0, current_hp=25, current_mp=11, daily_reward_date=today_key(),
@@ -1169,7 +1177,10 @@ def migrate_schema():
     additions = {
         # db.create_all() does not add columns to an already-existing table.
         # Upgrade legacy accounts before querying User during admin bootstrap.
-        User.__table__.name: {"is_admin": "BOOLEAN NOT NULL DEFAULT FALSE"},
+        User.__table__.name: {
+            "email": "VARCHAR(255)",
+            "is_admin": "BOOLEAN NOT NULL DEFAULT FALSE",
+        },
         Player.__table__.name: {"user_id": "INTEGER", "class_code": "VARCHAR(24)", "task_mapping": "JSON", "task_mapping_version": "INTEGER DEFAULT 0", "setup_complete": "BOOLEAN DEFAULT FALSE", "relics_owned": "JSON", "active_relic_id": "VARCHAR(24)", "manto_xp_remainder": "INTEGER DEFAULT 0"},
         DailyEvaluation.__table__.name: {"user_id": "INTEGER"},
         Activity.__table__.name: {"user_id": "INTEGER", "client_ref": "VARCHAR(80)"},
@@ -1224,7 +1235,12 @@ def migrate_schema():
     admin_password = os.getenv("ADMIN_PASSWORD") or os.getenv("SITE_PASSWORD", "12345678")
     admin = User.query.filter_by(username=admin_name).first()
     if admin is None:
-        admin = User(username=admin_name, password_hash=generate_password_hash(admin_password), is_admin=True)
+        admin = User(
+            username=admin_name,
+            email=os.getenv("ADMIN_EMAIL", f"{admin_name}@users.rpg-habitos.invalid").strip().lower(),
+            password_hash=generate_password_hash(admin_password),
+            is_admin=True,
+        )
         db.session.add(admin); db.session.flush()
     else:
         admin.is_admin = True

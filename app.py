@@ -81,6 +81,8 @@ class User(db.Model):
     email = db.Column(db.String(255), nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
+    # Idempotency marker: prevents a legacy single-player profile being imported twice.
+    legacy_progress_imported = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=local_now)
 
 
@@ -353,19 +355,13 @@ def build_state(p: Player) -> dict:
                                     "mp_savings_credit":c.get("player_mp_savings_credit",run.get("mp_savings_credit",0)),
                                     "available_items":[{**CONSUMABLES[k],"quantity":int((p.inventory or {}).get(k,0)),"dungeon_quantity":int(run.get("run_potions",{}).get(k,0))} for k in CONSUMABLES]}
     today_xp = db.session.query(func.coalesce(func.sum(DailyEvaluation.xp), 0)).filter_by(user_id=p.user_id, day=today_key()).scalar() or 0
-    story = {"physical_chapters": int(p.physical_chapters), "study_chapters": int(p.study_chapters),
-             "unlocked_odd": (int(p.physical_chapters)*2 - 1) if p.physical_chapters else None,
-             "unlocked_even": (int(p.study_chapters)*2) if p.study_chapters else None,
-             "next_odd": int(p.physical_chapters)*2 + 1,
-             "next_even": int(p.study_chapters)*2 + 2,
-             "novel_url":"https://novelmania.com.br/novels/necromante-da-estacao-de-seul"}
     return {
         "ok": True,
         "player": {"coins": int(p.coins), "hp": hp, "hp_max": stats["hp_max"], "mp": mp, "mp_max": stats["mp_max"],
                    "stats": stats["stats"], "attributes": attrs, "today_xp": int(today_xp), "weekly_dungeons": weekly_count,
                    "weekly_limit": WEEKLY_DUNGEON_LIMIT, "inventory": inventory_payload(p), "equipped": p.equipped or {},
                    "daily_reward_seconds": int(p.daily_reward_seconds), "special_reward_seconds": int(p.permanent_special_seconds),
-                   "reward_session_active": bool(p.reward_session_active), "story": story,
+                   "reward_session_active": bool(p.reward_session_active),
                    "last_dungeon_result": p.last_dungeon_result,
                    "username": current_user().username, "account_id": int(current_user().id), "is_admin": bool(current_user().is_admin),
                    "class_code": p.class_code, "class": CLASS_DEFINITIONS.get(p.class_code or ""),
@@ -585,15 +581,6 @@ def evaluate_attribute():
             reward_message=f"+{reward_seconds_gained//60}m{reward_seconds_gained%60:02d}s de recompensa." if reward_seconds_gained else "Limite de recompensa diária já atingido."
         else:
             reward_message="A avaliação offline foi sincronizada; o saldo diário antigo já expirou."
-        physical_codes={"DEF","ATK","AGI","RES"}
-        # Award at most one physical chapter per recorded day, even if several physical stats were evaluated.
-        has_physical_for_day = DailyEvaluation.query.filter_by(user_id=user.id, day=day).filter(DailyEvaluation.attribute.in_(physical_codes)).filter(DailyEvaluation.attribute != code).first()
-        if code in physical_codes and not has_physical_for_day:
-            p.physical_chapters=int(p.physical_chapters)+1; p.physical_unlock_date=day
-            reward_message += f" Capítulo ímpar {p.physical_chapters*2-1} desbloqueado!"
-        if code=="MAG":
-            p.study_chapters=int(p.study_chapters)+1; p.study_unlock_date=day
-            reward_message += f" Capítulo par {p.study_chapters*2} desbloqueado!"
     db.session.commit()
     return jsonify({"ok":True,"message":f"Autoavaliação registrada: +{gained} XP" + (f" e +{bonus} XP do Manto." if bonus else ".") + (" " + reward_message if reward_message else ""),"state":build_state(p)})
 
@@ -1168,6 +1155,145 @@ def idempotency_store(response):
     return response
 
 
+def _merge_inventory(source_inventory, target_inventory):
+    """Merge stackable items while preserving every key from both inventories."""
+    src = clone_json(source_inventory, {}) or {}
+    dst = clone_json(target_inventory, {}) or {}
+    merged = dict(src)
+    merged.update(dst)
+    equipment = {}
+    for data in (src.get("equipment") or {}, dst.get("equipment") or {}):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                try:
+                    equipment[key] = int(equipment.get(key, 0)) + int(value or 0)
+                except (TypeError, ValueError):
+                    equipment.setdefault(key, value)
+    merged["equipment"] = equipment
+    for key in set(src) | set(dst):
+        if key == "equipment":
+            continue
+        a, b = src.get(key), dst.get(key)
+        if isinstance(a, (int, float)) and not isinstance(a, bool) and isinstance(b, (int, float)) and not isinstance(b, bool):
+            merged[key] = a + b
+        elif key not in dst:
+            merged[key] = a
+        else:
+            merged[key] = b
+    return merged
+
+
+def _transfer_legacy_progress_to_account(source_user, target_user):
+    """Move the old anonymous/admin profile to the chosen account once, without destroying records."""
+    if not source_user or not target_user or source_user.id == target_user.id:
+        return False
+    if bool(getattr(target_user, "legacy_progress_imported", False)):
+        return False
+
+    source_player = Player.query.filter_by(user_id=source_user.id).first()
+    target_player = Player.query.filter_by(user_id=target_user.id).first()
+    daily_rows = DailyEvaluation.query.filter_by(user_id=source_user.id).all()
+    activity_rows = Activity.query.filter_by(user_id=source_user.id).all()
+    dungeon_rows = DungeonAttempt.query.filter_by(user_id=source_user.id).all()
+    idempotency_rows = IdempotencyRecord.query.filter_by(user_id=source_user.id).all()
+    if not (source_player or daily_rows or activity_rows or dungeon_rows or idempotency_rows):
+        return False
+
+    today = today_key()
+    if source_player:
+        src_xp = clone_json(source_player.xp_by_attribute, default_xp()) or default_xp()
+        # The legacy game had no class bonus. Apply Monge's double RES bonus retroactively.
+        try:
+            src_xp["RES"] = int(src_xp.get("RES", 0) or 0) * 2
+        except (TypeError, ValueError):
+            src_xp["RES"] = 0
+        source_player.xp_by_attribute = src_xp
+
+        if target_player is None:
+            source_player.user_id = target_user.id
+            target_player = source_player
+            # A daily balance expires at midnight; do not resurrect an old day's time.
+            if source_player.daily_reward_date != today:
+                source_player.daily_reward_date = today
+                source_player.daily_reward_seconds = 0
+            else:
+                source_player.daily_reward_seconds = min(DAILY_REWARD_CAP, int(source_player.daily_reward_seconds or 0))
+            source_player.reward_session_active = False
+            source_player.reward_last_tick_at = None
+        else:
+            dst_xp = clone_json(target_player.xp_by_attribute, default_xp()) or default_xp()
+            for code in set(src_xp) | set(dst_xp):
+                try:
+                    dst_xp[code] = int(dst_xp.get(code, 0) or 0) + int(src_xp.get(code, 0) or 0)
+                except (TypeError, ValueError):
+                    dst_xp[code] = int(dst_xp.get(code, 0) or 0)
+            target_player.xp_by_attribute = dst_xp
+            target_player.inventory = _merge_inventory(source_player.inventory, target_player.inventory)
+            target_player.coins = int(target_player.coins or 0) + int(source_player.coins or 0)
+            target_player.equipped = {**(source_player.equipped or {}), **(target_player.equipped or {})}
+            target_player.current_hp = max(int(target_player.current_hp or 0), int(source_player.current_hp or 0))
+            target_player.current_mp = max(int(target_player.current_mp or 0), int(source_player.current_mp or 0))
+            if not target_player.dungeon_state:
+                target_player.dungeon_state = clone_json(source_player.dungeon_state, None)
+            target_player.last_dungeon_result = target_player.last_dungeon_result or source_player.last_dungeon_result
+            target_player.permanent_special_seconds = int(target_player.permanent_special_seconds or 0) + int(source_player.permanent_special_seconds or 0)
+            # Only merge daily time if both balances still belong to today.
+            dst_daily = int(target_player.daily_reward_seconds or 0) if target_player.daily_reward_date == today else 0
+            src_daily = int(source_player.daily_reward_seconds or 0) if source_player.daily_reward_date == today else 0
+            target_player.daily_reward_date = today
+            target_player.daily_reward_seconds = min(DAILY_REWARD_CAP, dst_daily + src_daily)
+            target_player.reward_session_active = False
+            target_player.reward_last_tick_at = None
+            if not target_player.class_code:
+                target_player.class_code = source_player.class_code
+            if not target_player.task_mapping:
+                target_player.task_mapping = clone_json(source_player.task_mapping, default_task_mapping())
+            target_player.task_mapping_version = max(int(target_player.task_mapping_version or 0), int(source_player.task_mapping_version or 0))
+            target_player.setup_complete = bool(target_player.setup_complete or source_player.setup_complete or target_player.class_code)
+            target_player.relics_owned = list(dict.fromkeys((source_player.relics_owned or []) + (target_player.relics_owned or [])))
+            if target_player.active_relic_id not in (target_player.relics_owned or []):
+                target_player.active_relic_id = source_player.active_relic_id if source_player.active_relic_id in (target_player.relics_owned or []) else None
+            target_player.manto_xp_remainder = (int(target_player.manto_xp_remainder or 0) + int(source_player.manto_xp_remainder or 0)) % 10
+            # The story reward was retired; do not carry forward or expose its unlock counters.
+            db.session.delete(source_player)
+
+    # Move evaluations, doubling historical RES evaluation XP. If both accounts have the same
+    # attribute/day, combine them into one row to respect the per-account uniqueness constraint.
+    for row in daily_rows:
+        factor = 2 if row.attribute == "RES" else 1
+        row.xp = int(row.xp or 0) * factor
+        existing = DailyEvaluation.query.filter_by(user_id=target_user.id, attribute=row.attribute, day=row.day).first()
+        if existing and existing.id != row.id:
+            existing.xp = int(existing.xp or 0) + int(row.xp or 0)
+            existing.score = max(int(existing.score or 0), int(row.score or 0))
+            db.session.delete(row)
+        else:
+            row.user_id = target_user.id
+
+    # Preserve activity records even if client-side idempotency refs happen to collide.
+    target_refs = {r.client_ref for r in Activity.query.filter_by(user_id=target_user.id).all() if r.client_ref}
+    for row in activity_rows:
+        if row.client_ref and row.client_ref in target_refs:
+            row.client_ref = None
+        row.user_id = target_user.id
+        if row.client_ref:
+            target_refs.add(row.client_ref)
+    for row in dungeon_rows:
+        row.user_id = target_user.id
+    target_operation_ids = {r.operation_id for r in IdempotencyRecord.query.filter_by(user_id=target_user.id).all()}
+    for row in idempotency_rows:
+        if row.operation_id in target_operation_ids:
+            db.session.delete(row)
+        else:
+            row.user_id = target_user.id
+            target_operation_ids.add(row.operation_id)
+
+    target_user.legacy_progress_imported = True
+    db.session.flush()
+    app.logger.info("Legacy progress migrated from user %s to %s; historical RES XP doubled once.", source_user.username, target_user.username)
+    return True
+
+
 def migrate_schema():
     """Additive migration for legacy single-player databases; existing progress is kept."""
     db.create_all()
@@ -1180,6 +1306,7 @@ def migrate_schema():
         User.__table__.name: {
             "email": "VARCHAR(255)",
             "is_admin": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "legacy_progress_imported": "BOOLEAN NOT NULL DEFAULT FALSE",
         },
         Player.__table__.name: {"user_id": "INTEGER", "class_code": "VARCHAR(24)", "task_mapping": "JSON", "task_mapping_version": "INTEGER DEFAULT 0", "setup_complete": "BOOLEAN DEFAULT FALSE", "relics_owned": "JSON", "active_relic_id": "VARCHAR(24)", "manto_xp_remainder": "INTEGER DEFAULT 0"},
         DailyEvaluation.__table__.name: {"user_id": "INTEGER"},
@@ -1265,6 +1392,14 @@ def migrate_schema():
         if row.active_relic_id and row.active_relic_id not in (row.relics_owned or []): row.active_relic_id = None
         if row.active_relic_id is None and row.relics_owned: row.active_relic_id = row.relics_owned[0]
         if row.manto_xp_remainder is None: row.manto_xp_remainder = 0
+
+    # The user used to play without an account; the old build attached that profile to the
+    # bootstrap admin. Import it into the explicitly requested account, exactly once.
+    target_name = os.getenv("LEGACY_PROGRESS_TARGET_USERNAME", "shiksz").strip().lower() or "shiksz"
+    target_user = User.query.filter_by(username=target_name).first()
+    if target_user and target_user.id != admin.id:
+        _transfer_legacy_progress_to_account(admin, target_user)
+
     db.session.commit()
 
 

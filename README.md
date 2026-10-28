@@ -102,3 +102,8 @@ static/sprites/          sprites pixel-art das classes
 tests/test_engine.py     testes do motor
 a render.yaml            configuração do deploy no Render
 ```
+
+
+### Migração única do progresso antigo
+
+Na primeira inicialização desta versão, se existir uma conta `shiksz`, o aplicativo transfere para ela o perfil legado que estava associado à conta administrativa padrão. A operação mantém os registros, combina inventário/moedas e avaliações sem apagar o restante do banco, dobra o XP histórico de RES uma única vez e grava um marcador no usuário para não repetir a transferência. O destino pode ser alterado com a variável `LEGACY_PROGRESS_TARGET_USERNAME`; não configure essa variável para uma conta que não deva receber o progresso. Faça backup do banco antes de implantar.

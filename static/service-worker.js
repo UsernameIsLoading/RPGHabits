@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rpg-habitos-shell-v3';
+const CACHE_NAME = 'rpg-habitos-shell-v4';
 const CORE = [
   '/static/style.css', '/static/app.js', '/static/manifest.json',
   '/static/icon-192.svg', '/static/icon-512.svg', '/static/offline.html',

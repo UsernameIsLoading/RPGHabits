@@ -4,7 +4,7 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = (v = '') => String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const ATTR_CODES = ['HP','DEF','ATK','AGI','MP','MAG','RES','LUC'];
-  const state = { data:null, tab:'attributes', selectedAttr:'HP', site:'youtube', chart:null, chartSettings:{a:'HP',b:'',days:'30',group:'day'}, toastTimer:null, rewardInterval:null, rewardExternalWindow:null, storyUrl:'https://novelmania.com.br/novels/necromante-da-estacao-de-seul' };
+  const state = { data:null, tab:'attributes', selectedAttr:'HP', site:'youtube', chart:null, chartSettings:{a:'HP',b:'',days:'30',group:'day'}, toastTimer:null, rewardInterval:null, rewardExternalWindow:null };
   const sites = {
     youtube:{title:'YouTube',url:'https://www.youtube.com',icon:'▶',desc:'Vídeos, aulas e conteúdos selecionados.'},
     wikipedia:{title:'Wikipedia',url:'https://pt.wikipedia.org/wiki/P%C3%A1gina_principal',icon:'◎',desc:'Pesquisa e leitura de conhecimento.'},
@@ -69,7 +69,7 @@
       body.day=day;const gained=(p.class?.dominant===code?score*2:score);let bonus=0;
       if(p.active_relic_id==='manto_heroi_esquecido'&&(p.relics_owned||[]).some(r=>r.id==='manto_heroi_esquecido')&&gained>0){const total=(p.manto_xp_remainder||0)+gained;bonus=Math.floor(total/10);p.manto_xp_remainder=total%10;}
       localXP(code,gained+bonus);a.today_evaluation={score,xp:gained+bonus};d.daily_evaluations=d.daily_evaluations||{};d.daily_evaluations[code]={score,xp:gained+bonus};p.today_xp=(p.today_xp||0)+gained+bonus;
-      if(score>0){if(day===todayKey())p.daily_reward_seconds=Math.min(1200,(p.daily_reward_seconds||0)+150);if(day===todayKey()&&['DEF','ATK','AGI','RES'].includes(code)&&!p._physical_today){p.story.physical_chapters++;p._physical_today=true;}if(day===todayKey()&&code==='MAG'&&!p._study_today){p.story.study_chapters++;p._study_today=true;}}
+      if(score>0&&day===todayKey())p.daily_reward_seconds=Math.min(1200,(p.daily_reward_seconds||0)+150);
       message=`Avaliação salva offline: +${gained} XP${bonus?` e +${bonus} XP do Manto`:''}.`;
     }else if(path==='/api/activities'&&method==='POST'){
       const clientRef=`local-${uuid()}`;body.client_ref=clientRef;
@@ -277,7 +277,6 @@
     const products=[
       {id:'pocao_cura',icon:'🧪',name:'Poção de Cura',desc:'Recupera até 8 HP.',price:30,qty:p.inventory.consumables.find(x=>x.id==='pocao_cura')?.quantity||0},
       {id:'pocao_mana',icon:'🔮',name:'Poção de Mana',desc:'Recupera até 6 MP.',price:30,qty:p.inventory.consumables.find(x=>x.id==='pocao_mana')?.quantity||0},
-      {id:'bracelete_salvacao',icon:'🛡️',name:'Bracelete da Salvação',desc:'Uso único: preserva equipamentos do loot se você morrer na dungeon.',price:500,qty:p.inventory.bracelete_salvacao||0},
       {id:'ticket_dungeon',icon:'🎟️',name:'Ticket de Dungeon',desc:'Permite iniciar uma exploração extra além do limite semanal.',price:600,qty:p.inventory.ticket_dungeon||0},
       {id:'minute',icon:'⏱️',name:'1 minuto adicional',desc:'Adiciona 60 segundos ao saldo especial permanente.',price:1000,qty:null}
     ];
@@ -289,25 +288,22 @@
     const maxDaily=Math.max(0,p.daily_reward_seconds||0);
     return `${renderHeading('Loja','Consumíveis, segurança, tempo e relíquias vinculadas.',`<span class="badge red">◉ ${Number(p.coins).toLocaleString('pt-BR')} MOEDAS</span>`)}
       <div class="site-grid">${products.map(it=>`<article class="card site-card"><span class="site-icon">${it.icon}</span><h3>${esc(it.name)}</h3><p>${esc(it.desc)}</p>${it.qty!==null?`<small class="muted">No inventário: ${it.qty}</small>`:''}<button class="primary" data-buy-item="${it.id}" ${Number(p.coins)<it.price?'disabled':''}>Comprar · ${it.price.toLocaleString('pt-BR')} moedas</button></article>`).join('')}</div>
+      <div class="sub-section-title" style="margin-top:25px"><h2>Espaço de utilidade</h2><span class="badge">ITENS DE APOIO</span></div><p class="muted">Itens de uso especial ficam aqui, separados dos consumíveis comuns e das relíquias vinculadas.</p>
+      <div class="site-grid"><article class="card site-card"><span class="site-icon">🛡️</span><h3>Bracelete da Salvação</h3><p>Uso único: preserva equipamentos do loot se você morrer na dungeon.</p><small class="muted">No inventário: ${Number(p.inventory.bracelete_salvacao||0)}</small><button class="primary" data-buy-item="bracelete_salvacao" ${Number(p.coins)<500?'disabled':''}>Comprar · 500 moedas</button></article></div>
       <div class="sub-section-title" style="margin-top:25px"><h2>Relíquias Vinculadas</h2><span class="badge">NÃO PODEM SER ROUBADAS</span></div><p class="muted">Relíquias acompanham sua conta e não são perdidas ao morrer na dungeon. As duas primeiras são permanentes; o Pingente é consumível.</p>
-      <section class="card content-card sub-section relic-slot"><div class="card-head"><div><h2>Espaço de utilidade</h2><p>Você pode possuir as duas relíquias permanentes, mas apenas uma fica ativa por vez.</p></div><span class="badge">${p.active_relic_id?esc(relics.find(it=>it.id===p.active_relic_id)?.name||'ATIVA'):'VAZIO'}</span></div></section>
+      <section class="card content-card sub-section relic-slot"><div class="card-head"><div><h2>Espaço de relíquias</h2><p>Você pode possuir as duas relíquias permanentes, mas apenas uma fica ativa por vez.</p></div><span class="badge">${p.active_relic_id?esc(relics.find(it=>it.id===p.active_relic_id)?.name||'ATIVA'):'VAZIO'}</span></div></section>
       <div class="site-grid">${relics.map(it=>{const active=p.active_relic_id===it.id;return `<article class="card site-card relic-card"><span class="site-icon">${it.icon}</span><h3>${esc(it.name)}</h3><p>${esc(it.desc)}</p>${it.owned?(active?'<small class="owned-label">Ativa · vinculada à conta</small>':'<small class="owned-label">Possuída · inativa</small>'):it.qty?`<small class="owned-label">No inventário: ${it.qty}</small>`:''}${it.passive&&it.owned?`<button class="${active?'secondary':'primary'}" data-activate-relic="${it.id}" ${active?'disabled':''}>${active?'Relíquia ativa':'Ativar relíquia'}</button>`:`<button class="primary" data-buy-item="${it.id}" ${Number(p.coins)<it.price?'disabled':''}>Comprar · ${it.price.toLocaleString('pt-BR')} moedas</button>`}</article>`;}).join('')}</div>
       ${p.active_relic_id==='anel_investidor_nato'?`<section class="card content-card sub-section"><div class="card-head"><div><h2>Converter tempo em moedas</h2><p>Taxa: 1 segundo vendido = 1 moeda. Apenas o saldo diário pode ser convertido.</p></div><span class="badge">${humanDuration(maxDaily)} DISPONÍVEIS</span></div><form id="sell-time-form" class="relic-form"><div class="form-control"><label for="sell-seconds">Segundos para vender</label><input class="input" id="sell-seconds" type="number" min="1" max="${maxDaily}" value="${maxDaily}" required></div><div class="form-control"><label>Você recebe</label><input class="input" id="sell-coins-preview" value="${maxDaily} moedas" readonly></div><button class="primary" type="submit" ${maxDaily<=0?'disabled':''}>Vender tempo</button></form></section>`:''}
       ${(p.inventory.pingente_deusa_amor||0)>0?`<section class="card content-card sub-section"><div class="card-head"><div><h2>Usar Pingente da Deusa do Amor</h2><p>Transfere exatamente 10 XP. O rank é recalculado nos dois atributos.</p></div><span class="badge">×${p.inventory.pingente_deusa_amor} DISPONÍVEL</span></div><form id="transfer-xp-form" class="relic-form"><div class="form-control"><label for="transfer-source">Retirar de</label><select id="transfer-source" required>${p.attributes.filter(a=>a.xp>=10).map(a=>`<option value="${a.code}">${a.code} · ${esc(a.name)} (${a.xp} XP)</option>`).join('')}</select></div><div class="form-control"><label for="transfer-target">Adicionar a</label><select id="transfer-target" required>${p.attributes.map(a=>`<option value="${a.code}">${a.code} · ${esc(a.name)} (${a.xp} XP)</option>`).join('')}</select></div><button class="primary" type="submit">Transferir 10 XP</button></form></section>`:''}
       <p class="muted" style="margin-top:16px">As compras são descontadas imediatamente. O bracelete só é consumido quando salva o loot de uma derrota; o ticket só é consumido ao entrar além do limite semanal.</p>`;
   }
   function renderRewards(){
-    const p=state.data.player;const story=p.story;
+    const p=state.data.player;
     const daily=p.daily_reward_seconds||0;const special=p.special_reward_seconds||0;
     const sitesHtml=Object.entries(sites).map(([key,s])=>`<article class="card site-card"><span class="site-icon">${esc(s.icon)}</span><h3>${esc(s.title)}</h3><p>${esc(s.desc)}</p><button class="primary" data-open-site="${key}">Abrir janela ↗</button></article>`).join('');
-    const oddUnlocked=story.physical_chapters>0?Array.from({length:Math.min(story.physical_chapters,30)},(_,i)=>2*(i+1)-1):[];
-    const evenUnlocked=story.study_chapters>0?Array.from({length:Math.min(story.study_chapters,30)},(_,i)=>2*(i+1)):[];
-    const storyTiles=(oddUnlocked.map(n=>({n,type:'physical',label:'Treino físico'})).concat(evenUnlocked.map(n=>({n,type:'study',label:'Estudos'}))).sort((a,b)=>a.n-b.n));
     return `${renderHeading('Recompensas','Desbloqueie tempo de lazer com tarefas cumpridas e chefes derrotados.',`<span class="badge red">${humanDuration(daily)} DIÁRIO</span>`)}
       <section class="card reward-balance"><span class="reward-balance-icon">◷</span><div class="reward-balance-copy"><p class="eyebrow">TEMPO DISPONÍVEL</p><strong id="reward-daily-display">${humanDuration(daily)}</strong><small>Saldo diário · até 20 minutos gerados hoje</small></div><div class="reward-balance-special"><small>SALDO ESPECIAL PERMANENTE</small><strong id="reward-special-display">${humanDuration(special)}</strong><small>Chefes derrotados</small></div></section>
       <div class="sub-section-title" style="margin-top:23px"><h3>Janelas de recompensa</h3><span class="badge">O TEMPO CONTA COM A JANELA ABERTA</span></div><div class="site-grid">${sitesHtml}</div><p class="muted" style="font-size:10px;margin:0 0 25px">Os sites abrem numa janela dentro do jogo. Alguns serviços bloqueiam incorporação; nesse caso, o botão de nova aba serve como alternativa. O cronômetro continua enquanto a janela está aberta.</p>
-      <section class="card story-card"><div><p class="eyebrow">RECOMPENSA DE HISTÓRIA</p><h2>Necromante da Estação de Seul</h2><p>Treino físico desbloqueia capítulos ímpares; estudos para concurso desbloqueiam capítulos pares. O jogo guarda o progresso, mas a leitura é feita diretamente na fonte oficial.</p><div class="chapter-tile ${story.physical_chapters?'':'locked'}"><span class="chapter-num">${story.physical_chapters?2*story.physical_chapters-1:'—'}</span><div><strong>Trilha de treinamento</strong><small>${story.physical_chapters?`${story.physical_chapters} capítulo(s) ímpar(es) desbloqueado(s)`:'Conclua uma tarefa física para desbloquear o capítulo 1'}</small></div>${story.physical_chapters?`<button class="secondary small-btn" data-open-story="${2*story.physical_chapters-1}">Ler ↗</button>`:''}</div><div class="chapter-tile ${story.study_chapters?'':'locked'}"><span class="chapter-num">${story.study_chapters?2*story.study_chapters:'—'}</span><div><strong>Trilha de estudos</strong><small>${story.study_chapters?`${story.study_chapters} capítulo(s) par(es) desbloqueado(s)`:'Conclua Estudos para concurso para desbloquear o capítulo 2'}</small></div>${story.study_chapters?`<button class="secondary small-btn" data-open-story="${2*story.study_chapters}">Ler ↗</button>`:''}</div></div>
-        <div><p class="eyebrow">CAPÍTULOS DISPONÍVEIS</p>${storyTiles.length?storyTiles.slice(-12).map(ch=>`<div class="chapter-tile"><span class="chapter-num">${ch.n}</span><div><strong>Capítulo ${ch.n}</strong><small>Desbloqueado por ${ch.type==='physical'?'treinamento físico':'estudos'}</small></div><button class="ghost small-btn" data-open-story="${ch.n}">Abrir ↗</button></div>`).join(''):`<div class="empty-state"><strong>Nenhum capítulo desbloqueado.</strong>Conclua uma avaliação positiva de treino ou de estudos.</div>`}<div style="margin-top:12px"><button class="secondary full" data-open-story="0">Abrir página oficial da novel ↗</button></div></div></section>
       <section class="card content-card sub-section"><div class="card-head"><div><h2>Como o tempo é conquistado</h2><p>Regras de recompensa.</p></div></div><div class="grid grid-3"><div class="dungeon-state-card"><small>TAREFA POSITIVA</small><strong>+2m30s</strong><p class="muted" style="font-size:10px">Cada atributo cumprido pode conceder tempo, até 20 min por dia.</p></div><div class="dungeon-state-card"><small>CHEFE DERROTADO</small><strong>+40 min</strong><p class="muted" style="font-size:10px">Saldo especial persistente, consumido depois do saldo diário.</p></div><div class="dungeon-state-card"><small>ORDEM DE CONSUMO</small><strong>Diário → Especial</strong><p class="muted" style="font-size:10px">O saldo diário não usado expira na virada do dia.</p></div></div></section>`;
   }
   function bindPageEvents(){
@@ -357,7 +353,6 @@
     $('#chart-update')?.addEventListener('click',()=>{state.chartSettings.a=$('#chart-a').value;state.chartSettings.b=$('#chart-b').value;state.chartSettings.days=$('#chart-days').value;state.chartSettings.group=$('#chart-group').value;loadChart()});
     $$('[data-buy-item]').forEach(b=>b.addEventListener('click',async()=>{try{const d=await api('/api/shop/buy',{method:'POST',body:{item_id:b.dataset.buyItem}});state.data=d.state;render();toast(d.message);}catch(e){toast(e.message,true)}}));
     $$('[data-open-site]').forEach(b=>b.addEventListener('click',()=>openSite(b.dataset.openSite)));
-    $$('[data-open-story]').forEach(b=>b.addEventListener('click',()=>openStory(Number(b.dataset.openStory))));
   }
   async function combatAction(action){
     try{const d=await api('/api/dungeon/action',{method:'POST',body:action});state.data=d.state;render();toast(d.message||'Ação realizada.');}catch(e){toast(e.message,true)}
@@ -444,13 +439,6 @@
   function switchSite(key){
     if(!sites[key])return;state.site=key;$('#site-modal-title').textContent=sites[key].title;$('#site-frame').src=sites[key].url;$('#site-external').href=sites[key].url;$$('#site-switcher button').forEach(b=>b.classList.toggle('active',b.dataset.site===key));
   }
-  function openStory(chapter){
-    const base=state.data?.player?.story?.novel_url||state.storyUrl;
-    const url=chapter>0?`${base}/capitulos/volume-1-capitulo-${chapter}`:base;
-    $('#story-modal-title').textContent=chapter>0?`Necromante da Estação de Seul · Capítulo ${chapter}`:'Necromante da Estação de Seul';
-    $('#story-frame').src=url;$('#story-external').href=url;$('#story-modal').classList.remove('hidden');
-    if(chapter>0)toast(`Abrindo o capítulo ${chapter} na fonte oficial.`);
-  }
   function updateModalTimer(){
     const p=state.data?.player;if(!p)return;const remaining=(p.daily_reward_seconds||0)+(p.special_reward_seconds||0);$('#modal-timer').textContent=fmtTime(remaining);$('#reward-daily-display')&&($('#reward-daily-display').textContent=humanDuration(p.daily_reward_seconds||0));$('#reward-special-display')&&($('#reward-special-display').textContent=humanDuration(p.special_reward_seconds||0));
   }
@@ -464,7 +452,7 @@
     if(id==='site-modal'){
       stopRewardPings();$('#site-frame').src='about:blank';if(state.rewardExternalWindow&&!state.rewardExternalWindow.closed){try{state.rewardExternalWindow.close()}catch{}}state.rewardExternalWindow=null;
       try{const d=await api('/api/rewards/session',{method:'POST',body:{active:false}});state.data=d.state||state.data;updateModalTimer();}catch(e){toast(e.message,true)}
-    }else{$('#story-frame').src='about:blank';}
+    }
   }
   document.addEventListener('click',e=>{
     const nav=e.target.closest('[data-tab]');if(nav){setTab(nav.dataset.tab);return;}
@@ -472,7 +460,6 @@
     const switcher=e.target.closest('[data-site]');if(switcher){switchSite(switcher.dataset.site);return;}
   });
   $('#site-modal')?.addEventListener('click',e=>{if(e.target.id==='site-modal')closeModal('site-modal')});
-  $('#story-modal')?.addEventListener('click',e=>{if(e.target.id==='story-modal')closeModal('story-modal')});
   $('#logout-btn')?.addEventListener('click',async()=>{
     if(!navigator.onLine){toast('Para sair ou trocar de conta, conecte-se primeiro. O progresso offline continuará salvo.');return;}
     try{await api('/api/logout',{method:'POST',body:{}});location.href='/';}

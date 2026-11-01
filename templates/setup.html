@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101321">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <title>Crie seu personagem — RPG de Hábitos</title>
+</head>
+<body class="login-body pixel-theme">
+<main class="setup-shell" style="max-width:920px">
+  <p class="eyebrow">PRIMEIRO ACESSO · CONFIGURAÇÃO INICIAL</p>
+  <h1>Crie seu <span>personagem</span></h1>
+  <p class="muted">Escolha sua classe, associe uma tarefa a cada atributo e defina seu site de recompensa. Depois de confirmar, essas escolhas ficam bloqueadas.</p>
+  <form id="class-form">
+    {% if existing_class %}
+      <section class="card content-card" style="margin-bottom:18px"><div class="class-identity"><span class="avatar"><img class="avatar-img" src="{{ existing_class.sprite_url }}" alt=""></span><div><strong>{{ existing_class.name }}</strong><small>Classe já existente · não pode ser alterada</small></div></div><input type="hidden" name="class_code" value="{{ existing_class_code or '' }}" id="existing-class-code"></section>
+    {% else %}
+      <h2>1. Escolha sua classe</h2>
+      <div class="class-grid">{% for code, cls in classes.items() %}<label class="class-choice"><input type="radio" name="class_code" value="{{ code }}" {% if loop.first %}checked{% endif %}><img class="class-sprite-img" src="{{ cls.sprite_url }}" alt="Sprite da classe {{ cls.name }}"><strong>{{ cls.name }}</strong><small>Dominante: {{ cls.dominant }}</small><p>{{ cls.description }}</p><span class="class-bonus">XP ×2 em {{ cls.dominant }}</span></label>{% endfor %}</div>
+    {% endif %}
+    <section class="card content-card sub-section" style="margin-top:20px">
+      <h2>2. Defina suas oito tarefas</h2>
+      <p class="muted">Cada atividade fica vinculada permanentemente ao atributo correspondente. Use nomes diferentes.</p>
+      <div class="task-config-grid">
+      {% set attr_names = {'HP':'HP · Vida','DEF':'DEF · Defesa','ATK':'ATK · Ataque','AGI':'AGI · Agilidade','MP':'MP · Mana','MAG':'MAG · Magia','RES':'RES · Resistência','LUC':'LUC · Sorte'} %}
+      {% for code, label in attr_names.items() %}
+        <div class="form-control"><label for="task-{{ code }}">{{ label }}</label><input class="input" id="task-{{ code }}" data-task-code="{{ code }}" maxlength="80" value="{{ existing_mapping.get(code, '') }}" required></div>
+      {% endfor %}
+      </div>
+    </section>
+    <section class="card content-card sub-section" style="margin-top:16px">
+      <h2>3. Escolha seu site de recompensa</h2>
+      <p class="muted">Informe o site que será aberto na aba Recompensas. Você poderá acessá-lo usando o tempo conquistado no jogo.</p>
+      <div class="field-row">
+        <div class="form-control"><label for="reward-site-name">Nome do site</label><input class="input" id="reward-site-name" maxlength="80" value="{{ existing_name }}" placeholder="Ex.: seu site favorito" required></div>
+        <div class="form-control"><label for="reward-site-url">Endereço do site</label><input class="input" id="reward-site-url" type="url" maxlength="600" value="{{ existing_url }}" placeholder="https://exemplo.com" required></div>
+      </div>
+    </section>
+    <button class="primary full" type="submit" style="margin-top:18px">Confirmar personagem</button>
+    <p id="setup-error" class="error-text" aria-live="polite"></p>
+  </form>
+</main>
+<script>
+const form=document.querySelector('#class-form');
+form.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const classCode=form.querySelector('[name="class_code"]')?.value || '';
+  const taskMapping={};form.querySelectorAll('[data-task-code]').forEach(input=>taskMapping[input.dataset.taskCode]=input.value.trim());
+  const body={class_code:classCode,task_mapping:taskMapping,reward_site_name:document.querySelector('#reward-site-name').value.trim(),reward_site_url:document.querySelector('#reward-site-url').value.trim()};
+  const err=document.querySelector('#setup-error');
+  if(new Set(Object.values(taskMapping).map(x=>x.toLocaleLowerCase())).size!==8){err.textContent='As oito tarefas precisam ter nomes diferentes.';return;}
+  try{const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Não foi possível configurar o personagem.');location.href='/';}
+  catch(ex){err.textContent=ex.message;}
+});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/service-worker.js').catch(()=>{});
+</script>
+</body></html>

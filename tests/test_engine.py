@@ -12,9 +12,9 @@ import game_engine as ge
 
 class ProgressionTests(unittest.TestCase):
     def test_rank_thresholds(self):
-        expected = {0: "F", 59: "F", 60: "E", 179: "E", 180: "D",
-                    419: "D", 420: "C", 899: "C", 900: "B",
-                    1859: "B", 1860: "A", 3779: "A", 3780: "S"}
+        expected = {0: "F", 8: "F", 9: "E", 35: "E", 36: "D",
+                    116: "D", 117: "C", 359: "C", 360: "B",
+                    1088: "B", 1089: "A", 3275: "A", 3276: "S"}
         for xp, rank in expected.items():
             with self.subTest(xp=xp):
                 self.assertEqual(ge.rank_for_xp(xp), rank)
@@ -42,6 +42,37 @@ class ProgressionTests(unittest.TestCase):
             if monster["tier"] == "strong":
                 for skill in monster["skills"]:
                     self.assertNotEqual(gd.SKILL_BY_ID[skill["id"]]["rank"], "F")
+
+
+class ClassSkillTests(unittest.TestCase):
+    def test_each_class_receives_a_skill_that_scales_with_its_dominant_rank(self):
+        mapping = {
+            "guardiao": ("HP", "Fortaleza Interior"),
+            "sentinela": ("DEF", "Postura Inabalável"),
+            "lutador": ("ATK", "Golpe Devastador"),
+            "duelista": ("AGI", "Passo Fantasma"),
+            "invocador": ("MP", "Espírito Guardião"),
+            "arcanista": ("MAG", "Descarga Arcana"),
+            "monge": ("RES", "Equilíbrio Vital"),
+            "explorador": ("LUC", "Instinto Predador"),
+        }
+        for code, (attribute, name) in mapping.items():
+            with self.subTest(class_code=code):
+                xp = {a["code"]: 0 for a in gd.ATTRIBUTES}
+                base = ge.class_skill_for_player(code, xp)
+                self.assertEqual(base["name"], name)
+                self.assertEqual(base["attr"], attribute)
+                xp[attribute] = gd.RANK_XP["S"]
+                maxed = ge.class_skill_for_player(code, xp)
+                self.assertGreater(maxed["amount"], base["amount"])
+                self.assertTrue(maxed["class_skill"])
+
+    def test_class_skill_is_exposed_as_an_active_skill(self):
+        xp = {a["code"]: 0 for a in gd.ATTRIBUTES}
+        rows = ge.describe_player_skills(xp, {}, "guardiao")
+        skill = next(row for row in rows if row.get("class_skill"))
+        self.assertTrue(skill["unlocked"])
+        self.assertEqual(skill["action"], "heal_guard")
 
 
 class DungeonTests(unittest.TestCase):

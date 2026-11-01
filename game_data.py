@@ -1,6 +1,6 @@
 """Catálogo declarativo do RPG de hábitos. Sem lógica de aplicação/web aqui."""
 RANKS = ["F", "E", "D", "C", "B", "A", "S"]
-RANK_XP = {"F": 0, "E": 60, "D": 180, "C": 420, "B": 900, "A": 1860, "S": 3780}
+RANK_XP = {"F": 0, "E": 9, "D": 36, "C": 117, "B": 360, "A": 1089, "S": 3276}
 RANK_INDEX = {r: i for i, r in enumerate(RANKS)}
 RANK_STAT = {r: i + 1 for i, r in enumerate(RANKS)}
 

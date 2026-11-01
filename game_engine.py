@@ -15,6 +15,36 @@ DAILY_REWARD_PER_TASK = 150
 DAILY_REWARD_CAP = 1200
 WEEKLY_DUNGEON_LIMIT = 2
 
+CLASS_SKILLS = {
+    "guardiao": {"name": "Fortaleza Interior", "attr": "HP", "action": "heal_guard", "amounts": [2,3,4,5,6,7,8], "cooldowns": [5,5,5,4,4,4,3], "description": "Recupera HP e fortalece sua defesa por um turno."},
+    "sentinela": {"name": "Postura Inabalável", "attr": "DEF", "action": "buff_def", "amounts": [1,2,3,4,5,6,7], "cooldowns": [5,5,5,4,4,4,3], "duration": 2, "description": "Aumenta DEF temporariamente."},
+    "lutador": {"name": "Golpe Devastador", "attr": "ATK", "action": "next_attack", "amounts": [1,2,3,4,5,6,7], "cooldowns": [4,4,4,4,3,3,3], "description": "Fortalece o próximo ataque."},
+    "duelista": {"name": "Passo Fantasma", "attr": "AGI", "action": "afterimage", "amounts": [1,2,3,4,5,6,7], "evasion": [5,8,10,12,15,18,20], "cooldowns": [5,5,4,4,4,3,3], "duration": 1, "description": "Aumenta AGI e chance de esquiva."},
+    "invocador": {"name": "Espírito Guardião", "attr": "MP", "action": "guard", "amounts": [1,2,3,4,5,6,7], "cooldowns": [5,5,5,4,4,4,3], "description": "Um espírito reduz o próximo dano recebido."},
+    "arcanista": {"name": "Descarga Arcana", "attr": "MAG", "action": "magic_attack", "amounts": [1,2,3,4,5,6,7], "cooldowns": [5,5,5,4,4,4,3], "mp_cost": 2, "description": "Dispara dano mágico adicional."},
+    "monge": {"name": "Equilíbrio Vital", "attr": "RES", "action": "buff_res", "amounts": [1,2,3,4,5,6,7], "cooldowns": [5,5,5,4,4,4,3], "duration": 2, "description": "Aumenta RES temporariamente, reduzindo o dano mágico recebido."},
+    "explorador": {"name": "Instinto Predador", "attr": "LUC", "action": "predator_strike", "amounts": [1,2,3,4,5,6,7], "evasion": [5,8,10,12,15,18,20], "cooldowns": [5,5,4,4,4,3,3], "description": "Fortalece o próximo ataque e melhora a esquiva."},
+}
+
+
+def class_skill_for_player(class_code: str | None, xp_by_attr: dict[str, int]) -> dict | None:
+    spec = CLASS_SKILLS.get(class_code or "")
+    if not spec:
+        return None
+    rank = rank_summary(xp_by_attr)[spec["attr"]]
+    i = int(rank["rank_index"])
+    amount = int(spec["amounts"][i])
+    desc = f"{spec['description']} Efeito atual: {amount}. Evolui automaticamente com {spec['attr']}."
+    skill = {"id": f"class_{class_code}", "name": spec["name"], "attr": spec["attr"], "rank": rank["rank"],
+             "kind": "active", "desc": desc, "action": spec["action"], "amount": amount,
+             "cooldown": int(spec["cooldowns"][i]), "mp_cost": int(spec.get("mp_cost", 0)),
+             "class_skill": True}
+    if spec.get("duration"):
+        skill["duration"] = int(spec["duration"])
+    if spec.get("evasion"):
+        skill["evasion_pp"] = int(spec["evasion"][i])
+    return skill
+
 
 def rank_for_xp(xp: int) -> str:
     rank = "F"
@@ -46,7 +76,7 @@ def active_equipment(equipped: dict[str, str] | None) -> list[dict]:
 
 
 def effective_skills(xp_by_attr: dict[str, int], equipped: dict[str, str] | None = None,
-                     extra_skills: list[dict] | None = None) -> dict[str, dict]:
+                     extra_skills: list[dict] | None = None, class_code: str | None = None) -> dict[str, dict]:
     """Une skills desbloqueadas e efeitos de equipamento; a mesma skill só conta uma vez.
     Quando duas fontes concedem a mesma skill, fica a versão de maior efeito numérico.
     """
@@ -63,6 +93,9 @@ def effective_skills(xp_by_attr: dict[str, int], equipped: dict[str, str] | None
             old = found.get(base["id"])
             if old is None or _skill_power(base) > _skill_power(old):
                 found[base["id"]] = base
+    class_skill = class_skill_for_player(class_code, xp_by_attr)
+    if class_skill:
+        found[class_skill["id"]] = class_skill
     for custom in extra_skills or []:
         sid = custom.get("id")
         if sid in SKILL_BY_ID:
@@ -85,9 +118,9 @@ def _skill_power(skill: dict) -> tuple[float, int]:
 
 def compute_player_stats(xp_by_attr: dict[str, int], equipped: dict[str, str] | None = None,
                          current_hp: int | None = None, current_mp: int | None = None,
-                         combat: dict | None = None) -> dict[str, Any]:
+                         combat: dict | None = None, class_code: str | None = None) -> dict[str, Any]:
     ranks = rank_summary(xp_by_attr)
-    skills = effective_skills(xp_by_attr, equipped)
+    skills = effective_skills(xp_by_attr, equipped, class_code=class_code)
     attr_values = {c: RANK_STAT[ranks[c]["rank"]] for c in ("DEF", "ATK", "AGI", "MAG", "RES", "LUC")}
     for skill in skills.values():
         if skill.get("kind") == "passive" and skill.get("action") == "stat_bonus":
@@ -477,9 +510,18 @@ def _activate_skill(actor: dict, target: dict, skill: dict, combat: dict, is_pla
     elif action=="next_ignore":
         actor.setdefault("next_attack",{"bonus":0,"ignore":0})["ignore"]+=amount
         events.append(f"{name}: próximo ataque ignora {amount} DEF.")
+    elif action=="predator_strike":
+        actor.setdefault("next_attack",{"bonus":0,"ignore":0})["bonus"]+=amount
+        actor["evasion_pp"] = max(int(actor.get("evasion_pp",0)), int(skill.get("evasion_pp",5)))
+        events.append(f"{name}: próximo ataque recebe +{amount} dano e sua esquiva melhora.")
     elif action=="heal":
         healed=_heal(actor,amount)
         events.append(f"{name}: recuperou {healed} HP.")
+    elif action=="heal_guard":
+        healed=_heal(actor,amount)
+        guard_bonus=max(1, math.ceil(amount / 2))
+        actor.setdefault("buffs",[]).append({"stat":"DEF","amount":guard_bonus,"remaining":1,"created_turn":int(actor.get("turn",0))})
+        events.append(f"{name}: recuperou {healed} HP e recebeu +{guard_bonus} DEF por 1 turno.")
     elif action=="restore_mp":
         restored=_restore_mp(actor,amount)
         events.append(f"{name}: recuperou {restored} MP.")
@@ -653,7 +695,7 @@ def resolve_player_action(run: dict, player_snapshot: dict, action: dict, invent
     combat=run.get("combat")
     if not combat: raise ValueError("Não há combate ativo.")
     enemy=combat["enemy"]
-    pstats=compute_player_stats(xp_by_attr,equipped,combat.get("player_hp",player_snapshot["hp"]),combat.get("player_mp",player_snapshot["mp"]),None)
+    pstats=compute_player_stats(xp_by_attr,equipped,combat.get("player_hp",player_snapshot["hp"]),combat.get("player_mp",player_snapshot["mp"]),None,player_snapshot.get("class_code"))
     actor=_combat_player_actor(combat,pstats)
     # A cada rodada, se o inimigo for mais ágil, ele age antes do jogador.
     if enemy.get("hp",0)<=0: return {"events":[],"result":"enemy_defeated","inventory":inventory}
@@ -674,7 +716,7 @@ def resolve_player_action(run: dict, player_snapshot: dict, action: dict, invent
             _sync_player_actor(combat,actor)
             return {"events":events,"result":"player_defeated","inventory":inventory}
         # Recalcula passivas condicionais, como Postura Firme, após o golpe de iniciativa.
-        pstats=compute_player_stats(xp_by_attr,equipped,actor["hp"],actor["mp"],None)
+        pstats=compute_player_stats(xp_by_attr,equipped,actor["hp"],actor["mp"],None,player_snapshot.get("class_code"))
         actor["stats"]=pstats["stats"]
         actor["hp_max"]=pstats["hp_max"]
         actor["mp_max"]=pstats["mp_max"]
@@ -768,10 +810,13 @@ def award_monster_rewards(monster_id: str, xp_by_attr: dict[str,int], equipped: 
     return {"items":drops,"coins":coins,"messages":luck_messages}
 
 
-def describe_player_skills(xp_by_attr: dict[str,int], equipped: dict[str,str] | None = None) -> list[dict]:
-    available=effective_skills(xp_by_attr,equipped)
+def describe_player_skills(xp_by_attr: dict[str,int], equipped: dict[str,str] | None = None, class_code: str | None = None) -> list[dict]:
+    available=effective_skills(xp_by_attr,equipped,class_code=class_code)
     result=[]
     for skill in SKILLS:
         unlocked=skill["id"] in available
         result.append({**skill,"unlocked":unlocked,"source_item":available.get(skill["id"],{}).get("source_item")})
+    class_skill = class_skill_for_player(class_code, xp_by_attr)
+    if class_skill:
+        result.append({**class_skill, "unlocked": True, "source_item": None})
     return result

@@ -338,13 +338,12 @@
   function renderRewards(){
     const p=state.data.player;
     const daily=p.daily_reward_seconds||0;const special=p.special_reward_seconds||0;
-    const siteName=p.reward_site_name||'Site não configurado';
-    const siteUrl=p.reward_site_url||'';
+    const sites=[{name:p.reward_site_name||'Primeiro site não configurado',url:p.reward_site_url||''},{name:p.reward_site2_name||'Segundo site não configurado',url:p.reward_site2_url||''}];
     return `${renderHeading('Recompensas','Use o tempo conquistado com suas tarefas e dungeons.',`<span class="badge red">${humanDuration(daily)} DIÁRIO</span>`)}
       <section class="card reward-balance"><span class="reward-balance-icon">◷</span><div class="reward-balance-copy"><p class="eyebrow">TEMPO DISPONÍVEL</p><strong id="reward-daily-display">${humanDuration(daily)}</strong><small>Saldo diário · até 20 minutos gerados hoje</small></div><div class="reward-balance-special"><small>SALDO ESPECIAL PERMANENTE</small><strong id="reward-special-display">${humanDuration(special)}</strong><small>Chefes derrotados</small></div></section>
-      <div class="sub-section-title" style="margin-top:23px"><h3>Seu site de recompensa</h3><span class="badge">ESCOLHIDO NA CRIAÇÃO</span></div>
-      <article class="card site-card"><span class="site-icon">◉</span><h3>${esc(siteName)}</h3><p>${esc(siteUrl)}</p><button class="primary" data-open-personal-site ${!siteUrl?'disabled':''}>Abrir janela ↗</button></article>
-      <p class="muted" style="font-size:10px;margin:10px 0 25px">O site é individual e foi definido durante a criação do personagem. Alguns serviços bloqueiam incorporação; nesse caso, use a opção de abrir em nova aba. A troca de site não é feita nesta página.</p>
+      <div class="sub-section-title" style="margin-top:23px"><h3>Seus sites de recompensa</h3><span class="badge">ESCOLHIDOS NA CRIAÇÃO</span></div>
+      <div class="site-grid">${sites.map((site,i)=>`<article class="card site-card"><span class="site-icon">◉</span><h3>${esc(site.name)}</h3><p>${esc(site.url)}</p><button class="primary" data-open-personal-site="${i}" ${!site.url?'disabled':''}>Abrir janela ↗</button></article>`).join('')}</div>
+      <p class="muted" style="font-size:10px;margin:10px 0 25px">Escolha qualquer um dos dois sites. Ambos usam o mesmo saldo de tempo de recompensa.</p>
       <section class="card content-card sub-section"><div class="card-head"><div><h2>Como o tempo é conquistado</h2><p>Regras de recompensa.</p></div></div><div class="grid grid-3"><div class="dungeon-state-card"><small>TAREFA POSITIVA</small><strong>+2m30s</strong><p class="muted" style="font-size:10px">Cada atributo cumprido pode conceder tempo, até 20 min por dia.</p></div><div class="dungeon-state-card"><small>CHEFE DERROTADO</small><strong>+40 min</strong><p class="muted" style="font-size:10px">Saldo especial persistente, consumido depois do saldo diário.</p></div><div class="dungeon-state-card"><small>ORDEM DE CONSUMO</small><strong>Diário → Especial</strong><p class="muted" style="font-size:10px">O saldo diário não usado expira na virada do dia.</p></div></div></section>`;
   }
   function renderLibrary(){
@@ -409,7 +408,7 @@
     $$('[data-dashboard-attr]').forEach(b=>b.addEventListener('click',()=>{state.chartSettings.a=b.dataset.dashboardAttr;state.chartSettings.b='';const a=$('#chart-a');if(a)a.value=state.chartSettings.a;const s=$('#chart-b');if(s)s.value='';loadChart()}));
     $('#chart-update')?.addEventListener('click',()=>{state.chartSettings.a=$('#chart-a').value;state.chartSettings.b=$('#chart-b').value;state.chartSettings.days=$('#chart-days').value;state.chartSettings.group=$('#chart-group').value;loadChart()});
     $$('[data-buy-item]').forEach(b=>b.addEventListener('click',async()=>{try{const d=await api('/api/shop/buy',{method:'POST',body:{item_id:b.dataset.buyItem}});state.data=d.state;render();toast(d.message);}catch(e){toast(e.message,true)}}));
-    $('[data-open-personal-site]')?.addEventListener('click',()=>openSite());
+    $$('[data-open-personal-site]').forEach(b=>b.addEventListener('click',()=>openSite(Number(b.dataset.openPersonalSite)||0)));
     const coopInviteForm=$('#coop-invite-form');if(coopInviteForm)coopInviteForm.addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('/api/coop/invite',{method:'POST',body:{username:$('#coop-username').value.trim()}});state.data=d.state;render();toast(d.message);}catch(err){toast(err.message,true)}});
     $$('[data-coop-respond]').forEach(b=>b.addEventListener('click',async()=>{try{const d=await api('/api/coop/respond',{method:'POST',body:{invite_id:Number(b.dataset.inviteId),accept:b.dataset.coopRespond==='accept'}});state.data=d.state;render();toast(d.message);if(b.dataset.coopRespond==='accept')setTab('dungeon');}catch(err){toast(err.message,true)}}));
     $('#open-coop-dungeon')?.addEventListener('click',()=>setTab('dungeon'));
@@ -507,8 +506,8 @@
       const summary=$('#chart-summary');if(summary)summary.textContent=`${rows.length} intervalo(s) · agrupamento por ${group==='day'?'dia':group==='week'?'semana':'mês'} · médias dos registros numéricos${!navigator.onLine?' · dados locais deste dispositivo':''}.`;
     }catch(e){toast(e.message,true)}
   }
-  async function openSite(){
-    const p=state.data?.player;const url=p?.reward_site_url;const title=p?.reward_site_name||'Recompensa';
+  async function openSite(index=0){
+    const p=state.data?.player;const url=index===1?p?.reward_site2_url:p?.reward_site_url;const title=(index===1?p?.reward_site2_name:p?.reward_site_name)||'Recompensa';state.currentRewardUrl=url;
     if(!url){toast('Nenhum site de recompensa foi configurado para este personagem.',true);return;}
     if(!navigator.onLine){toast('Sites de recompensa são externos e precisam de internet. Seu saldo não foi consumido.',true);return;}
     try{const d=await api('/api/rewards/session',{method:'POST',body:{active:true}});state.data=d.state||state.data;$('#site-modal-title').textContent=title;$('#site-frame').src=url;$('#site-external').href=url;$('#site-modal').classList.remove('hidden');updateModalTimer();startRewardPings();}catch(e){toast(e.message,true)}
@@ -519,7 +518,7 @@
   function startRewardPings(){stopRewardPings();state.rewardInterval=setInterval(async()=>{
     try{const d=await api('/api/rewards/tick',{method:'POST',body:{}});if(state.data){state.data.player.daily_reward_seconds=d.daily;state.data.player.special_reward_seconds=d.special;state.data.player.reward_session_active=d.active;}updateModalTimer();if(!d.active){stopRewardPings();$('#site-modal').classList.add('hidden');$('#site-frame').src='about:blank';if(state.rewardExternalWindow&&!state.rewardExternalWindow.closed){try{state.rewardExternalWindow.close()}catch{}}state.rewardExternalWindow=null;toast('O tempo de recompensa acabou.');}}catch(e){stopRewardPings();toast(e.message,true)}
   },1000);}
-  $('#site-external')?.addEventListener('click',e=>{e.preventDefault();const url=state.data?.player?.reward_site_url;if(!url)return;state.rewardExternalWindow=window.open(url,'rpgHabitsRewardSite','noopener,noreferrer');if(!state.rewardExternalWindow){toast('O navegador bloqueou a nova aba. Permita pop-ups para fechar a aba automaticamente ao acabar o tempo.',true);return;} });
+  $('#site-external')?.addEventListener('click',e=>{e.preventDefault();const url=state.currentRewardUrl;if(!url)return;state.rewardExternalWindow=window.open(url,'rpgHabitsRewardSite','noopener,noreferrer');if(!state.rewardExternalWindow){toast('O navegador bloqueou a nova aba. Permita pop-ups para fechar a aba automaticamente ao acabar o tempo.',true);return;} });
   function stopRewardPings(){if(state.rewardInterval){clearInterval(state.rewardInterval);state.rewardInterval=null;}}
   async function libraryTick(active){
     if(!navigator.onLine)return;

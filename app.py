@@ -120,6 +120,8 @@ class Player(db.Model):
     character_config_version = db.Column(db.Integer, nullable=False, default=0)
     reward_site_name = db.Column(db.String(80), nullable=True)
     reward_site_url = db.Column(db.String(600), nullable=True)
+    reward_site2_name = db.Column(db.String(80), nullable=True)
+    reward_site2_url = db.Column(db.String(600), nullable=True)
     library_day = db.Column(db.String(10), nullable=False, default=today_key)
     library_seconds_today = db.Column(db.Integer, nullable=False, default=0)
     library_last_tick_at = db.Column(db.DateTime, nullable=True)
@@ -630,6 +632,7 @@ def build_state(p: Player) -> dict:
                    "setup_complete": bool(p.setup_complete), "task_mapping": p.task_mapping or default_task_mapping(),
                    "task_mapping_version": int(p.task_mapping_version or 0),
                    "reward_site_name": p.reward_site_name or "", "reward_site_url": p.reward_site_url or "",
+                   "reward_site2_name": p.reward_site2_name or "", "reward_site2_url": p.reward_site2_url or "",
                    "library_seconds_today": int(p.library_seconds_today or 0),
                    "library_coins_today": min(60, int(p.library_seconds_today or 0) // 60),
                    "library_documents": library_payload(p),
@@ -698,7 +701,9 @@ def index():
                                    existing_class_code=(p.class_code or "") if p else "",
                                    existing_mapping=(p.task_mapping or default_task_mapping()) if p else default_task_mapping(),
                                    existing_name=(p.reward_site_name or "") if p else "",
-                                   existing_url=(p.reward_site_url or "") if p else "")
+                                   existing_url=(p.reward_site_url or "") if p else "",
+                                   existing_name2=(p.reward_site2_name or "") if p else "",
+                                   existing_url2=(p.reward_site2_url or "") if p else "")
     return render_template("login.html")
 
 
@@ -773,25 +778,34 @@ def setup_character():
     if len({v.casefold() for v in cleaned.values()}) != len(cleaned):
         return api_error("Cada tarefa deve ser diferente e estar associada a um único atributo.")
 
-    site_name = str(data.get("reward_site_name", "")).strip()
-    site_url = str(data.get("reward_site_url", "")).strip()
-    if not site_name or len(site_name) > 80:
-        return api_error("Informe o nome do site de recompensa (até 80 caracteres).")
-    if not site_url:
-        return api_error("Informe o endereço do site de recompensa.")
-    if not site_url.startswith(("https://", "http://")):
-        site_url = "https://" + site_url
-    parsed = urlparse(site_url)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
-        return api_error("Endereço inválido. Use um site público começando com https:// ou http://.")
-    if len(site_url) > 600:
-        return api_error("O endereço do site é muito longo.")
+    def validate_reward_site(name_key, url_key, label):
+        site_name = str(data.get(name_key, "")).strip()
+        site_url = str(data.get(url_key, "")).strip()
+        if not site_name or len(site_name) > 80:
+            raise ValueError(f"Informe o nome do {label} (até 80 caracteres).")
+        if not site_url:
+            raise ValueError(f"Informe o endereço do {label}.")
+        if not site_url.startswith(("https://", "http://")):
+            site_url = "https://" + site_url
+        parsed = urlparse(site_url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError(f"Endereço inválido para {label}. Use http:// ou https://.")
+        if len(site_url) > 600:
+            raise ValueError(f"O endereço do {label} é muito longo.")
+        return site_name, site_url
+    try:
+        site_name, site_url = validate_reward_site("reward_site_name", "reward_site_url", "primeiro site de recompensa")
+        site2_name, site2_url = validate_reward_site("reward_site2_name", "reward_site2_url", "segundo site de recompensa")
+    except ValueError as exc:
+        return api_error(str(exc))
 
     p.class_code = class_code
     p.task_mapping = cleaned
     p.task_mapping_version = int(p.task_mapping_version or 0) + 1
     p.reward_site_name = site_name
     p.reward_site_url = site_url
+    p.reward_site2_name = site2_name
+    p.reward_site2_url = site2_url
     p.setup_complete = True
     p.character_config_version = 1
     db.session.commit()
@@ -2002,7 +2016,7 @@ def migrate_schema():
             "is_admin": "BOOLEAN NOT NULL DEFAULT FALSE",
             "legacy_progress_imported": "BOOLEAN NOT NULL DEFAULT FALSE",
         },
-        Player.__table__.name: {"user_id": "INTEGER", "class_code": "VARCHAR(24)", "task_mapping": "JSON", "task_mapping_version": "INTEGER DEFAULT 0", "setup_complete": "BOOLEAN DEFAULT FALSE", "relics_owned": "JSON", "active_relic_id": "VARCHAR(24)", "manto_xp_remainder": "INTEGER DEFAULT 0", "character_config_version": "INTEGER DEFAULT 0", "reward_site_name": "VARCHAR(80)", "reward_site_url": "VARCHAR(600)", "library_day": "VARCHAR(10)", "library_seconds_today": "INTEGER DEFAULT 0", "library_last_tick_at": library_timestamp_type, "library_session_active": "BOOLEAN DEFAULT FALSE"},
+        Player.__table__.name: {"user_id": "INTEGER", "class_code": "VARCHAR(24)", "task_mapping": "JSON", "task_mapping_version": "INTEGER DEFAULT 0", "setup_complete": "BOOLEAN DEFAULT FALSE", "relics_owned": "JSON", "active_relic_id": "VARCHAR(24)", "manto_xp_remainder": "INTEGER DEFAULT 0", "character_config_version": "INTEGER DEFAULT 0", "reward_site_name": "VARCHAR(80)", "reward_site_url": "VARCHAR(600)", "reward_site2_name": "VARCHAR(80)", "reward_site2_url": "VARCHAR(600)", "library_day": "VARCHAR(10)", "library_seconds_today": "INTEGER DEFAULT 0", "library_last_tick_at": library_timestamp_type, "library_session_active": "BOOLEAN DEFAULT FALSE"},
         DailyEvaluation.__table__.name: {"user_id": "INTEGER"},
         Activity.__table__.name: {"user_id": "INTEGER", "client_ref": "VARCHAR(80)"},
         DungeonAttempt.__table__.name: {"user_id": "INTEGER"},

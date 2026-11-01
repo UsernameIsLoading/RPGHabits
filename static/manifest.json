@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "RPG de Hábitos",
+  "short_name": "RPG Hábitos",
+  "description": "RPG de progressão pessoal com funcionamento offline.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#101321",
+  "theme_color": "#101321",
+  "icons": [
+    {"src": "/static/icon-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable"},
+    {"src": "/static/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}

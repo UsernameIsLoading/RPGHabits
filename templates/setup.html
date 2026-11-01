@@ -11,7 +11,7 @@
 <main class="setup-shell" style="max-width:920px">
   <p class="eyebrow">PRIMEIRO ACESSO · CONFIGURAÇÃO INICIAL</p>
   <h1>Crie seu <span>personagem</span></h1>
-  <p class="muted">Escolha sua classe, associe uma tarefa a cada atributo e defina seu site de recompensa. Depois de confirmar, essas escolhas ficam bloqueadas.</p>
+  <p class="muted">Escolha sua classe, associe uma tarefa a cada atributo e defina dois sites de recompensa. Depois de confirmar, essas escolhas ficam bloqueadas.</p>
   <form id="class-form">
     {% if existing_class %}
       <section class="card content-card" style="margin-bottom:18px"><div class="class-identity"><span class="avatar"><img class="avatar-img" src="{{ existing_class.sprite_url }}" alt=""></span><div><strong>{{ existing_class.name }}</strong><small>Classe já existente · não pode ser alterada</small></div></div><input type="hidden" name="class_code" value="{{ existing_class_code or '' }}" id="existing-class-code"></section>
@@ -30,11 +30,15 @@
       </div>
     </section>
     <section class="card content-card sub-section" style="margin-top:16px">
-      <h2>3. Escolha seu site de recompensa</h2>
-      <p class="muted">Informe o site que será aberto na aba Recompensas. Você poderá acessá-lo usando o tempo conquistado no jogo.</p>
+      <h2>3. Escolha seus dois sites de recompensa</h2>
+      <p class="muted">Cadastre dois sites diferentes. Na aba Recompensas, você poderá escolher qual abrir usando o tempo conquistado no jogo.</p>
       <div class="field-row">
-        <div class="form-control"><label for="reward-site-name">Nome do site</label><input class="input" id="reward-site-name" maxlength="80" value="{{ existing_name }}" placeholder="Ex.: seu site favorito" required></div>
-        <div class="form-control"><label for="reward-site-url">Endereço do site</label><input class="input" id="reward-site-url" type="url" maxlength="600" value="{{ existing_url }}" placeholder="https://exemplo.com" required></div>
+        <div class="form-control"><label for="reward-site-name">Nome do primeiro site</label><input class="input" id="reward-site-name" maxlength="80" value="{{ existing_name }}" placeholder="Ex.: YouTube" required></div>
+        <div class="form-control"><label for="reward-site-url">Endereço do primeiro site</label><input class="input" id="reward-site-url" type="url" maxlength="600" value="{{ existing_url }}" placeholder="https://exemplo.com" required></div>
+      </div>
+      <div class="field-row" style="margin-top:14px">
+        <div class="form-control"><label for="reward-site2-name">Nome do segundo site</label><input class="input" id="reward-site2-name" maxlength="80" value="{{ existing_name2 }}" placeholder="Ex.: Wikipedia" required></div>
+        <div class="form-control"><label for="reward-site2-url">Endereço do segundo site</label><input class="input" id="reward-site2-url" type="url" maxlength="600" value="{{ existing_url2 }}" placeholder="https://exemplo.com" required></div>
       </div>
     </section>
     <button class="primary full" type="submit" style="margin-top:18px">Confirmar personagem</button>
@@ -47,7 +51,7 @@ form.addEventListener('submit',async e=>{
   e.preventDefault();
   const classCode=form.querySelector('[name="class_code"]')?.value || '';
   const taskMapping={};form.querySelectorAll('[data-task-code]').forEach(input=>taskMapping[input.dataset.taskCode]=input.value.trim());
-  const body={class_code:classCode,task_mapping:taskMapping,reward_site_name:document.querySelector('#reward-site-name').value.trim(),reward_site_url:document.querySelector('#reward-site-url').value.trim()};
+  const body={class_code:classCode,task_mapping:taskMapping,reward_site_name:document.querySelector('#reward-site-name').value.trim(),reward_site_url:document.querySelector('#reward-site-url').value.trim(),reward_site2_name:document.querySelector('#reward-site2-name').value.trim(),reward_site2_url:document.querySelector('#reward-site2-url').value.trim()};
   const err=document.querySelector('#setup-error');
   if(new Set(Object.values(taskMapping).map(x=>x.toLocaleLowerCase())).size!==8){err.textContent='As oito tarefas precisam ter nomes diferentes.';return;}
   try{const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)});const d=await r.json();if(!r.ok||!d.ok)throw Error(d.error||'Não foi possível configurar o personagem.');location.href='/';}

@@ -1991,6 +1991,9 @@ def migrate_schema():
     inspector = inspect(db.engine)
     existing_tables = set(inspector.get_table_names())
     # Use the actual SQLAlchemy table names (singular snake_case), not guessed plural names.
+    # PostgreSQL uses TIMESTAMP; DATETIME is not a valid PostgreSQL column type.
+    # SQLite accepts DATETIME, so keep its native declaration there.
+    library_timestamp_type = "TIMESTAMP" if db.engine.dialect.name == "postgresql" else "DATETIME"
     additions = {
         # db.create_all() does not add columns to an already-existing table.
         # Upgrade legacy accounts before querying User during admin bootstrap.
@@ -1999,7 +2002,7 @@ def migrate_schema():
             "is_admin": "BOOLEAN NOT NULL DEFAULT FALSE",
             "legacy_progress_imported": "BOOLEAN NOT NULL DEFAULT FALSE",
         },
-        Player.__table__.name: {"user_id": "INTEGER", "class_code": "VARCHAR(24)", "task_mapping": "JSON", "task_mapping_version": "INTEGER DEFAULT 0", "setup_complete": "BOOLEAN DEFAULT FALSE", "relics_owned": "JSON", "active_relic_id": "VARCHAR(24)", "manto_xp_remainder": "INTEGER DEFAULT 0", "character_config_version": "INTEGER DEFAULT 0", "reward_site_name": "VARCHAR(80)", "reward_site_url": "VARCHAR(600)", "library_day": "VARCHAR(10)", "library_seconds_today": "INTEGER DEFAULT 0", "library_last_tick_at": "DATETIME", "library_session_active": "BOOLEAN DEFAULT FALSE"},
+        Player.__table__.name: {"user_id": "INTEGER", "class_code": "VARCHAR(24)", "task_mapping": "JSON", "task_mapping_version": "INTEGER DEFAULT 0", "setup_complete": "BOOLEAN DEFAULT FALSE", "relics_owned": "JSON", "active_relic_id": "VARCHAR(24)", "manto_xp_remainder": "INTEGER DEFAULT 0", "character_config_version": "INTEGER DEFAULT 0", "reward_site_name": "VARCHAR(80)", "reward_site_url": "VARCHAR(600)", "library_day": "VARCHAR(10)", "library_seconds_today": "INTEGER DEFAULT 0", "library_last_tick_at": library_timestamp_type, "library_session_active": "BOOLEAN DEFAULT FALSE"},
         DailyEvaluation.__table__.name: {"user_id": "INTEGER"},
         Activity.__table__.name: {"user_id": "INTEGER", "client_ref": "VARCHAR(80)"},
         DungeonAttempt.__table__.name: {"user_id": "INTEGER"},
